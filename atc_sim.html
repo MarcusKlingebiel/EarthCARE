@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ATC Radar Simulator</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#000; color:#33ff33;
+  font-family:'Courier New',monospace;
+  height:100vh; overflow:hidden;
+  display:flex; flex-direction:column;
+  user-select:none;
+}
+#header {
+  padding:5px 12px;
+  border-bottom:1px solid #0a2a0a;
+  display:flex; justify-content:space-between; align-items:center;
+  font-size:12px; background:#020a02; flex-shrink:0;
+}
+#main { display:flex; flex:1; overflow:hidden; }
+canvas { display:block; cursor:crosshair; flex-shrink:0; }
+#sidebar {
+  width:230px; border-left:1px solid #0a2a0a;
+  display:flex; flex-direction:column; overflow:hidden;
+  background:#010801;
+}
+#sidebar-title {
+  padding:4px 6px; font-size:11px;
+  border-bottom:1px solid #0a2a0a; background:#020f02;
+  color:#1a8a1a;
+}
+#strip-list { flex:1; overflow-y:auto; padding:3px; }
+.strip {
+  border:1px solid #0f2a0f; margin-bottom:3px; padding:3px 5px;
+  font-size:11px; cursor:pointer; background:#010901; line-height:1.5;
+}
+.strip:hover { background:#0a1f0a; }
+.strip.selected { background:#082008; border-color:#33ff33; }
+.strip.arr { border-left:3px solid #33aaff; }
+.strip.dep { border-left:3px solid #ffaa33; }
+.strip.warn { border-left:3px solid #ff3333; animation:blink .5s infinite; }
+#info-panel {
+  border-top:1px solid #0a2a0a; padding:6px; font-size:11px;
+  line-height:1.6; min-height:110px;
+}
+#msg-box {
+  border-top:1px solid #0a2a0a; height:68px;
+  overflow-y:auto; padding:3px 5px; font-size:10px;
+}
+.msg-ok   { color:#44ff44; }
+.msg-warn { color:#ffaa00; }
+.msg-err  { color:#ff4444; }
+#cmd-bar {
+  border-top:1px solid #0a2a0a;
+  padding:5px 6px; background:#010901;
+}
+#cmd-label { font-size:10px; color:#1a8a1a; margin-bottom:2px; }
+#cmd-input {
+  width:100%; background:#000; color:#33ff33;
+  border:1px solid #1a4a1a; font-family:'Courier New',monospace;
+  font-size:12px; padding:3px 5px; outline:none;
+}
+#cmd-input:focus { border-color:#33ff33; }
+#help-overlay {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,.88); display:flex; align-items:center;
+  justify-content:center; z-index:10;
+}
+#help-box {
+  border:1px solid #1a6a1a; padding:24px 32px; max-width:460px;
+  font-size:13px; line-height:2;
+}
+#help-box h2 { color:#44ff44; margin-bottom:12px; font-size:16px; }
+#help-box table { width:100%; border-collapse:collapse; }
+#help-box td { padding:2px 8px; color:#22cc22; }
+#help-box td:first-child { color:#88ff88; width:130px; }
+#start-btn {
+  margin-top:18px; width:100%; padding:8px;
+  background:#0a2a0a; border:1px solid #33ff33; color:#33ff33;
+  font-family:'Courier New',monospace; font-size:14px; cursor:pointer;
+}
+#start-btn:hover { background:#143a14; }
+#speed-btn {
+  cursor:pointer; background:#020f02; border:1px solid #1a4a1a;
+  color:#33ff33; font-family:'Courier New',monospace;
+  font-size:11px; padding:2px 7px;
+}
+#speed-btn:hover { border-color:#33ff33; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <span>⬡ ATC RADAR · EGLL APPROACH CONTROL · 40NM</span>
+  <span id="score-display">SCORE: 0 &nbsp;|&nbsp; LANDED: 0 &nbsp;|&nbsp; DEPARTED: 0</span>
+  <span>
+    <button id="speed-btn" onclick="cycleSpeed()">SIM ×<span id="speed-val">1</span></button>
+    &nbsp; [P] Pause &nbsp; [?] Help
+  </span>
+</div>
+
+<div id="main">
+  <canvas id="radar"></canvas>
+
+  <div id="sidebar">
+    <div id="sidebar-title">FLIGHT STRIPS</div>
+    <div id="strip-list"></div>
+    <div id="info-panel">
+      <div style="color:#1a8a1a;margin-bottom:3px">SELECTED</div>
+      <div id="ac-info">—</div>
+    </div>
+    <div id="msg-box"></div>
+    <div id="cmd-bar">
+      <div id="cmd-label">CMD › <span id="sel-cs" style="color:#aaffaa">none</span></div>
+      <input id="cmd-input" type="text"
+        placeholder="h 270 · a 090 · s 250 · app 27" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+</div>
+
+<!-- Help overlay -->
+<div id="help-overlay">
+  <div id="help-box">
+    <h2>ATC RADAR SIMULATOR</h2>
+    <table>
+      <tr><td>h [deg]</td><td>Fly heading (e.g. h 270)</td></tr>
+      <tr><td>a [FL]</td><td>Climb/descend (e.g. a 080 = FL080)</td></tr>
+      <tr><td>s [kts]</td><td>Set speed (e.g. s 250)</td></tr>
+      <tr><td>app [rwy]</td><td>Clear for ILS approach (app 27)</td></tr>
+      <tr><td>l / r [deg]</td><td>Turn left/right 30° (or specify deg)</td></tr>
+      <tr><td>Click aircraft</td><td>Select &amp; show info</td></tr>
+      <tr><td>P</td><td>Pause/resume</td></tr>
+      <tr><td>? or H</td><td>Show this help</td></tr>
+    </table>
+    <p style="margin-top:10px;color:#1a8a1a;font-size:11px">
+      Route arrivals (blue) to ILS approach for RWY 27 or 18.<br>
+      Route departures (orange) toward any edge waypoint.<br>
+      Maintain 3nm / 1000ft separation between all aircraft.
+    </p>
+    <button id="start-btn" onclick="startGame()">▶ START GAME</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ============================================================
+//  CONFIG
+// ============================================================
+const CFG = {
+  size: 0,          // set dynamically
+  range: 40,        // nm radius
+  simRate: 60,      // sim-sec per real-sec (base)
+  simRates: [1, 2, 4],
+  simRateIdx: 0,
+  spawnMinR: 18,    // real seconds
+  spawnMaxR: 30,
+  sepH: 3,          // nm
+  sepV: 1000,       // ft
+  trailLen: 7,
+  trailEvery: 4,    // sim-sec between trail points
+  maxAC: 12,
+};
+
+// Canvas sizing: fit the available height
+function initCanvas() {
+  const sidebar = 230;
+  const headerH = document.getElementById('header').offsetHeight;
+  const avail = Math.min(window.innerHeight - headerH, window.innerWidth - sidebar);
+  CFG.size = Math.floor(avail);
+  const c = document.getElementById('radar');
+  c.width = CFG.size;
+  c.height = CFG.size;
+}
+
+let PX, CX, CY;
+function updateScale() {
+  PX = CFG.size / 2 / CFG.range;
+  CX = CFG.size / 2;
+  CY = CFG.size / 2;
+}
+
+// ============================================================
+//  MATH
+// ============================================================
+const d2r = d => d * Math.PI / 180;
+const r2d = r => r * 180 / Math.PI;
+const sin = d => Math.sin(d2r(d));
+const cos = d => Math.cos(d2r(d));
+
+function normHdg(h) { return ((h % 360) + 360) % 360; }
+
+function hdgDiff(a, b) {
+  let d = ((b - a) % 360 + 360) % 360;
+  return d > 180 ? d - 360 : d;
+}
+
+function dst(x1,y1,x2,y2) { return Math.hypot(x2-x1, y2-y1); }
+
+function nm2px(x, y) { return { px: CX + x*PX, py: CY - y*PX }; }
+
+function bearing(fx, fy, tx, ty) {
+  return normHdg(r2d(Math.atan2(tx-fx, ty-fy)));
+}
+
+// ============================================================
+//  AIRPORT
+// ============================================================
+const RUNWAYS = [
+  { id:'27', hdg:270, tx: 4, ty:  0 },
+  { id:'09', hdg: 90, tx:-4, ty:  0 },
+  { id:'18', hdg:180, tx: 0, ty:  4 },
+  { id:'36', hdg:360, tx: 0, ty: -4 },
+];
+const RWY = Object.fromEntries(RUNWAYS.map(r => [r.id, r]));
+
+const WAYPOINTS = [
+  { id:'NORTN', x:  0, y: 35, hdg:180 },
+  { id:'EAST',  x: 35, y:  0, hdg:270 },
+  { id:'SOUTH', x:  0, y:-35, hdg:  0 },
+  { id:'WEST',  x:-35, y:  0, hdg: 90 },
+  { id:'NEE',   x: 27, y: 22, hdg:225 },
+  { id:'SEE',   x: 27, y:-22, hdg:300 },
+  { id:'SWW',   x:-27, y:-22, hdg: 45 },
+  { id:'NWW',   x:-27, y: 22, hdg:135 },
+];
+const WP = Object.fromEntries(WAYPOINTS.map(w => [w.id, w]));
+
+// ============================================================
+//  AIRCRAFT
+// ============================================================
+let uidSeq = 0;
+const TYPES = ['A320','B737','A319','B738','E190','A321','B77W','A330','B752'];
+const CALLSIGNS = [
+  'BAW1','KLM2','DLH3','AF4','EZY5','RYR6','UAE7','SWR8','IBE9','TAP10',
+  'SAS11','AUA12','TK13','QR14','EK15','VIR16','TCX17','JET18','BAW19','KLM20',
+];
+
+class AC {
+  constructor(o) {
+    this.uid   = ++uidSeq;
+    this.cs    = o.cs;
+    this.acType= TYPES[Math.floor(Math.random()*TYPES.length)];
+    this.kind  = o.kind;       // 'arr' | 'dep'
+    this.x     = o.x;
+    this.y     = o.y;
+    this.hdg   = o.hdg;
+    this.tHdg  = o.hdg;
+    this.alt   = o.alt;
+    this.tAlt  = o.alt;
+    this.spd   = o.spd;
+    this.tSpd  = o.spd;
+    this.dest  = o.dest  || null;  // waypoint id for deps
+    this.state = 'enroute';        // enroute | approach | final | landing
+    this.appRwy= null;
+    this.trail = [];
+    this.trailT= 0;
+    this.conflict  = false;
+    this._conflWarn= false;
+    this.removed   = false;
+  }
+
+  get fl() { return Math.round(this.alt / 100); }
+
+  update(dt) {
+    const sdt = dt * CFG.simRate * CFG.simRates[CFG.simRateIdx];
+
+    // Trail
+    this.trailT += sdt;
+    if (this.trailT >= CFG.trailEvery) {
+      this.trail.push({ x:this.x, y:this.y });
+      if (this.trail.length > CFG.trailLen) this.trail.shift();
+      this.trailT = 0;
+    }
+
+    // Approach guidance
+    if (this.state === 'approach' || this.state === 'final') {
+      this._guideApproach(sdt);
+    }
+
+    // Turn (3 deg/sim-sec)
+    const diff = hdgDiff(this.hdg, this.tHdg);
+    if (Math.abs(diff) > 0.5) {
+      this.hdg = normHdg(this.hdg + Math.sign(diff) * Math.min(3*sdt, Math.abs(diff)));
+    } else {
+      this.hdg = this.tHdg;
+    }
+
+    // Altitude (2000 ft/min)
+    const dAlt = this.tAlt - this.alt;
+    if (Math.abs(dAlt) > 5) {
+      this.alt += Math.sign(dAlt) * Math.min(2000/60*sdt, Math.abs(dAlt));
+    } else {
+      this.alt = this.tAlt;
+    }
+
+    // Speed (5 kts/sec)
+    const dSpd = this.tSpd - this.spd;
+    if (Math.abs(dSpd) > 1) {
+      this.spd += Math.sign(dSpd) * Math.min(5*sdt, Math.abs(dSpd));
+    } else {
+      this.spd = this.tSpd;
+    }
+
+    // Position
+    const nmps = this.spd / 3600;
+    this.x += sin(this.hdg) * nmps * sdt;
+    this.y += cos(this.hdg) * nmps * sdt;
+
+    // Landing check
+    if (this.state === 'final' && this.appRwy) {
+      const r = RWY[this.appRwy];
+      if (dst(this.x,this.y, r.tx,r.ty) < 0.35 && this.alt < 500) {
+        this.state = 'landing';
+      }
+    }
+  }
+
+  _guideApproach(sdt) {
+    const r = RWY[this.appRwy];
+    if (!r) return;
+
+    // Localizer axis: outward from threshold = opposite of landing heading
+    const outHdg = normHdg(r.hdg + 180);
+    const lcx = sin(outHdg);  // east component of localizer direction
+    const lcy = cos(outHdg);  // north component
+
+    const dx = this.x - r.tx;
+    const dy = this.y - r.ty;
+    const dToThr = Math.hypot(dx, dy);
+
+    // Signed crosstrack (+ = right of centerline when looking outward)
+    const cross = lcx*dy - lcy*dx;
+    // Along-track distance from threshold (positive = on localizer side)
+    const along = lcx*dx + lcy*dy;
+
+    if (this.state === 'approach') {
+      // Capture when aligned and near centerline
+      if (Math.abs(cross) < 0.25 && Math.abs(hdgDiff(this.hdg, r.hdg)) < 20 && along > 0.5) {
+        this.state = 'final';
+      } else {
+        // Aim at a point on the centerline ahead
+        const lookAhead = Math.max(along + 8, 8);
+        const tgx = r.tx + lcx * lookAhead;
+        const tgy = r.ty + lcy * lookAhead;
+        const raw = bearing(this.x, this.y, tgx, tgy);
+        // Clamp intercept to ±40° of runway heading
+        const intercept = hdgDiff(r.hdg, raw);
+        this.tHdg = normHdg(r.hdg + Math.max(-40, Math.min(40, intercept)));
+      }
+    }
+
+    if (this.state === 'final') {
+      this.tHdg = r.hdg;
+      // 3° glideslope: alt_ft = dist_nm * tan(3°) * 6076
+      const gsAlt = Math.max(0, dToThr * 318);
+      this.tAlt = gsAlt;
+      if (dToThr < 10) this.tSpd = Math.min(this.tSpd, 200);
+      if (dToThr <  5) this.tSpd = Math.min(this.tSpd, 165);
+      if (dToThr <  2) this.tSpd = Math.min(this.tSpd, 145);
+    }
+  }
+
+  clearApp(rwyId) {
+    const r = RWY[rwyId];
+    if (!r) return false;
+    const d = dst(this.x, this.y, r.tx, r.ty);
+    if (d > 32) return false;
+    this.appRwy = rwyId;
+    this.state  = 'approach';
+    return true;
+  }
+}
+
+// ============================================================
+//  GAME STATE
+// ============================================================
+const G = {
+  acs:       [],
+  selected:  null,
+  score:     0,
+  landed:    0,
+  departed:  0,
+  msgs:      [],
+  realTime:  0,
+  nextSpawn: 5,
+  sweep:     0,
+  usedCS:    new Set(),
+  paused:    false,
+  started:   false,
+};
+
+function freeCS(cs) { G.usedCS.delete(cs); }
+function nextCS() {
+  for (const cs of CALLSIGNS) if (!G.usedCS.has(cs)) { G.usedCS.add(cs); return cs; }
+  return 'AC' + uidSeq;
+}
+
+function msg(text, cls='') {
+  G.msgs.unshift({ text, cls });
+  if (G.msgs.length > 30) G.msgs.pop();
+  renderMsgs();
+}
+
+function spawn() {
+  if (G.acs.filter(a=>!a.removed).length >= CFG.maxAC) return;
+  const isArr = Math.random() < 0.65;
+  const wp = WAYPOINTS[Math.floor(Math.random()*WAYPOINTS.length)];
+
+  if (isArr) {
+    const alt = 8000 + Math.floor(Math.random()*7)*1000;
+    const spd = 280 + Math.floor(Math.random()*80);
+    const ac = new AC({
+      cs:   nextCS(),
+      kind: 'arr',
+      x:    wp.x + (Math.random()-.5)*3,
+      y:    wp.y + (Math.random()-.5)*3,
+      hdg:  wp.hdg, alt, spd,
+    });
+    G.acs.push(ac);
+    msg(`${ac.cs} (${ac.acType}) ARRIVAL FL${Math.round(alt/100).toString().padStart(3,'0')} ${spd}kts`, 'msg-ok');
+  } else {
+    const destWp = WAYPOINTS[Math.floor(Math.random()*WAYPOINTS.length)];
+    const ac = new AC({
+      cs:   nextCS(),
+      kind: 'dep',
+      x:    (Math.random()-.5)*.8,
+      y:    (Math.random()-.5)*.8,
+      hdg:  normHdg(bearing(0,0,destWp.x,destWp.y)),
+      alt:  0, spd: 0, dest: destWp.id,
+    });
+    ac.tSpd = 280 + Math.floor(Math.random()*60);
+    ac.tAlt = 10000 + Math.floor(Math.random()*4)*1000;
+    G.acs.push(ac);
+    msg(`${ac.cs} (${ac.acType}) DEPARTURE → ${destWp.id}`, '');
+  }
+}
+
+// ============================================================
+//  CONFLICT DETECTION
+// ============================================================
+function checkConflicts() {
+  const live = G.acs.filter(a=>!a.removed && a.state!=='landing');
+  live.forEach(a => a.conflict = false);
+  for (let i=0; i<live.length; i++) {
+    for (let j=i+1; j<live.length; j++) {
+      const a=live[i], b=live[j];
+      const hd = dst(a.x,a.y,b.x,b.y);
+      const vd = Math.abs(a.alt - b.alt);
+      const conflict = hd < CFG.sepH && vd < CFG.sepV;
+      a.conflict = a.conflict || conflict;
+      b.conflict = b.conflict || conflict;
+      if (conflict && !a._conflWarn) {
+        msg(`⚠ CONFLICT ${a.cs}/${b.cs} ${hd.toFixed(1)}nm ${Math.round(vd)}ft`, 'msg-err');
+        a._conflWarn = b._conflWarn = true;
+        G.score -= 200;
+        renderScore();
+      }
+      if (!conflict) { a._conflWarn = false; b._conflWarn = false; }
+    }
+  }
+}
+
+// ============================================================
+//  COMMANDS
+// ============================================================
+function parseCmd(raw) {
+  const ac = G.selected;
+  if (!ac || ac.removed) { msg('Select an aircraft first', 'msg-warn'); return; }
+  const parts = raw.trim().toLowerCase().split(/\s+/);
+  const cmd = parts[0], arg = parts[1];
+
+  switch (cmd) {
+    case 'h': case 'hdg': case 'heading': {
+      let h = parseInt(arg);
+      if (isNaN(h)||h<0||h>360) { msg('Invalid heading', 'msg-warn'); return; }
+      if (h===0) h=360;
+      ac.tHdg = h;
+      if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
+      msg(`${ac.cs}: HDG ${h.toString().padStart(3,'0')}°`);
+      break;
+    }
+    case 'a': case 'alt': case 'altitude': {
+      let fl = parseInt(arg);
+      if (isNaN(fl)) { msg('Invalid altitude', 'msg-warn'); return; }
+      if (fl<=450) fl*=100;
+      ac.tAlt = fl;
+      msg(`${ac.cs}: ${fl>ac.alt?'CLIMB':'DESCEND'} FL${Math.round(fl/100).toString().padStart(3,'0')}`);
+      break;
+    }
+    case 's': case 'spd': case 'speed': {
+      const s = parseInt(arg);
+      if (isNaN(s)||s<0||s>600) { msg('Invalid speed', 'msg-warn'); return; }
+      ac.tSpd = s;
+      msg(`${ac.cs}: SPEED ${s}kts`);
+      break;
+    }
+    case 'app': case 'ils': case 'approach': {
+      const rId = (arg||'27').toUpperCase();
+      if (!RWY[rId]) { msg(`Unknown runway ${rId}`, 'msg-warn'); return; }
+      if (ac.clearApp(rId)) {
+        msg(`${ac.cs}: CLEARED ILS RWY ${rId}`, 'msg-ok');
+      } else {
+        msg(`${ac.cs}: Too far for ILS RWY ${rId} (max 32nm)`, 'msg-warn');
+      }
+      break;
+    }
+    case 'l': case 'tl': case 'left': {
+      const deg = parseInt(arg)||30;
+      ac.tHdg = normHdg(ac.hdg - deg);
+      if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
+      msg(`${ac.cs}: TURN LEFT ${deg}°`);
+      break;
+    }
+    case 'r': case 'tr': case 'right': {
+      const deg = parseInt(arg)||30;
+      ac.tHdg = normHdg(ac.hdg + deg);
+      if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
+      msg(`${ac.cs}: TURN RIGHT ${deg}°`);
+      break;
+    }
+    default:
+      msg(`Unknown: ${cmd} — try h/a/s/app/l/r`, 'msg-warn');
+  }
+  renderAcInfo();
+}
+
+// ============================================================
+//  RENDERING
+// ============================================================
+const canvas = document.getElementById('radar');
+const ctx    = canvas.getContext('2d');
+
+function drawRadar() {
+  const { size:S } = CFG;
+  ctx.fillStyle = '#010e01';
+  ctx.fillRect(0, 0, S, S);
+
+  // Range rings
+  ctx.lineWidth = 1;
+  for (let r=10; r<=CFG.range; r+=10) {
+    ctx.strokeStyle = r===20 ? '#0d1f0d' : '#091509';
+    ctx.beginPath();
+    ctx.arc(CX, CY, r*PX, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.fillStyle = '#0f2f0f';
+    ctx.font = '9px Courier New';
+    ctx.fillText(`${r}nm`, CX+r*PX+3, CY-3);
+  }
+
+  // Cardinal ticks & labels
+  ['N','E','S','W'].forEach((lbl,i) => {
+    const h = i*90;
+    const rad = d2r(h); const r = CFG.range*PX;
+    ctx.strokeStyle = '#1a3a1a'; ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(CX+Math.sin(rad)*(r-12), CY-Math.cos(rad)*(r-12));
+    ctx.lineTo(CX+Math.sin(rad)*r,      CY-Math.cos(rad)*r);
+    ctx.stroke();
+    ctx.fillStyle='#2a5a2a'; ctx.font='10px Courier New';
+    ctx.fillText(lbl, CX+Math.sin(rad)*(r-22)-4, CY-Math.cos(rad)*(r-22)+4);
+  });
+
+  // Radar sweep
+  const sRad = d2r(G.sweep);
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = '#00ff55'; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(CX, CY);
+  ctx.lineTo(CX+Math.sin(sRad)*CFG.range*PX, CY-Math.cos(sRad)*CFG.range*PX);
+  ctx.stroke();
+  // Sweep glow arc
+  ctx.globalAlpha = 0.07;
+  ctx.fillStyle = '#00ff55';
+  const sweepW = d2r(35);
+  ctx.beginPath();
+  ctx.moveTo(CX,CY);
+  ctx.arc(CX,CY, CFG.range*PX, sRad-Math.PI/2-sweepW, sRad-Math.PI/2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // ILS feathers (dashed extended centerline)
+  ctx.setLineDash([5,5]);
+  ctx.strokeStyle='#0d2d0d'; ctx.lineWidth=1;
+  // RWY 27: extends east from (4,0)
+  drawLine(4,0, 26,0);
+  // RWY 18: extends north from (0,4)
+  drawLine(0,4, 0,26);
+  ctx.setLineDash([]);
+
+  // Runways
+  RUNWAYS.slice(0,2).forEach(r => {  // 09/27
+    ctx.strokeStyle='#1a5a1a'; ctx.lineWidth=4;
+    const hl = 2.8;
+    drawLine(r.tx - sin(r.hdg)*hl, r.ty - cos(r.hdg)*hl,
+             r.tx + sin(r.hdg)*hl, r.ty + cos(r.hdg)*hl);
+  });
+  RUNWAYS.slice(2,4).forEach(r => {  // 18/36
+    ctx.strokeStyle='#156015'; ctx.lineWidth=3;
+    const hl=2.8;
+    drawLine(r.tx-sin(r.hdg)*hl, r.ty-cos(r.hdg)*hl,
+             r.tx+sin(r.hdg)*hl, r.ty+cos(r.hdg)*hl);
+  });
+  // Rwy labels
+  ctx.fillStyle='#2a7a2a'; ctx.font='9px Courier New';
+  const r27=RWY['27']; const p27=nm2px(r27.tx+3.2,r27.ty);
+  ctx.fillText('27',p27.px-6,p27.py+3);
+  const p09=RWY['09']; const pp09=nm2px(p09.tx-3.8,p09.ty);
+  ctx.fillText('09',pp09.px-4,pp09.py+3);
+
+  // Waypoints (triangle symbol)
+  WAYPOINTS.forEach(wp => {
+    const { px,py } = nm2px(wp.x, wp.y);
+    ctx.strokeStyle='#1a5a1a'; ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(px, py-7); ctx.lineTo(px+5,py+4); ctx.lineTo(px-5,py+4);
+    ctx.closePath(); ctx.stroke();
+    ctx.fillStyle='#2a7a2a'; ctx.font='9px Courier New';
+    ctx.fillText(wp.id, px+7, py+4);
+  });
+
+  // Airport center
+  const { px:ax, py:ay } = nm2px(0,0);
+  ctx.strokeStyle='#2a8a2a'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(ax,ay,10,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(ax,ay-10); ctx.lineTo(ax,ay+10);
+  ctx.moveTo(ax-10,ay); ctx.lineTo(ax+10,ay);
+  ctx.stroke();
+
+  // Aircraft
+  G.acs.forEach(ac => {
+    if (ac.removed) return;
+    const isSel = G.selected && G.selected.uid===ac.uid;
+    const col = ac.conflict ? '#ff4444'
+      : isSel ? '#ffffff'
+      : ac.kind==='arr' ? '#33aaff' : '#ffaa33';
+
+    const { px,py } = nm2px(ac.x, ac.y);
+
+    // Trail dots
+    ac.trail.forEach((t,i) => {
+      const tp = nm2px(t.x,t.y);
+      ctx.globalAlpha = (i+1)/(ac.trail.length+2)*0.55;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(tp.px,tp.py,2,0,Math.PI*2); ctx.fill();
+    });
+    ctx.globalAlpha=1;
+
+    // Velocity vector (3 sim-min projection)
+    const proj = 3 * 60 / 3600 * ac.spd * CFG.simRate;
+    ctx.strokeStyle=col; ctx.globalAlpha=0.35; ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(px,py);
+    ctx.lineTo(px + sin(ac.hdg)*proj*PX, py - cos(ac.hdg)*proj*PX);
+    ctx.stroke();
+    ctx.globalAlpha=1;
+
+    // ILS line
+    if (ac.state==='approach'||ac.state==='final') {
+      const r = RWY[ac.appRwy];
+      if (r) {
+        const tp = nm2px(r.tx, r.ty);
+        ctx.setLineDash([3,3]);
+        ctx.strokeStyle='#33ff88'; ctx.lineWidth=1; ctx.globalAlpha=0.6;
+        ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(tp.px,tp.py); ctx.stroke();
+        ctx.setLineDash([]); ctx.globalAlpha=1;
+      }
+    }
+
+    // Blip
+    ctx.fillStyle = col;
+    if (isSel) {
+      ctx.strokeStyle=col; ctx.lineWidth=1.5;
+      ctx.beginPath();
+      ctx.moveTo(px,py-7); ctx.lineTo(px+5,py+1);
+      ctx.lineTo(px,py+4); ctx.lineTo(px-5,py+1);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2); ctx.fill();
+    }
+
+    // Conflict ring
+    if (ac.conflict) {
+      ctx.strokeStyle='#ff3333'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(px,py,10,0,Math.PI*2); ctx.stroke();
+    }
+
+    // Data tag
+    ctx.fillStyle=col;
+    ctx.font='bold 10px Courier New';
+    ctx.fillText(ac.cs, px+8, py-3);
+    ctx.fillStyle= ac.conflict ? '#ff8888' : col+'bb';
+    ctx.font='10px Courier New';
+    const flStr = ac.fl.toString().padStart(3,'0');
+    const hdgStr= Math.round(ac.hdg).toString().padStart(3,'0');
+    const stTag = ac.state==='approach'?'APP':(ac.state==='final'?`IL${ac.appRwy}`:'');
+    ctx.fillText(`${flStr} ${Math.round(ac.spd)}kts ${stTag}`, px+8, py+9);
+  });
+}
+
+function drawLine(x1,y1,x2,y2) {
+  const a=nm2px(x1,y1), b=nm2px(x2,y2);
+  ctx.beginPath(); ctx.moveTo(a.px,a.py); ctx.lineTo(b.px,b.py); ctx.stroke();
+}
+
+function renderStrips() {
+  const el = document.getElementById('strip-list');
+  const live = G.acs.filter(a=>!a.removed);
+  el.innerHTML = live.map(ac => {
+    const isSel = G.selected && G.selected.uid===ac.uid;
+    const cls = `strip ${ac.kind}${ac.conflict?' warn':''}${isSel?' selected':''}`;
+    const icon = ac.state==='approach'?'↘':ac.state==='final'?'▼':ac.kind==='dep'?'↑':'→';
+    const app = (ac.state==='approach'||ac.state==='final') ? ` ILS${ac.appRwy}` : '';
+    return `<div class="${cls}" data-uid="${ac.uid}">
+      ${icon} <b>${ac.cs}</b> ${ac.acType}${app}<br>
+      FL${ac.fl.toString().padStart(3,'0')} · ${Math.round(ac.spd)}kt · ${Math.round(ac.hdg).toString().padStart(3,'0')}°
+      ${ac.dest?`→ ${ac.dest}`:''}
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.strip').forEach(el => {
+    el.addEventListener('click', ()=>selectAC(parseInt(el.dataset.uid)));
+  });
+}
+
+function renderAcInfo() {
+  const ac = G.selected;
+  const el = document.getElementById('ac-info');
+  const cs = document.getElementById('sel-cs');
+  if (!ac||ac.removed) { el.innerHTML='—'; cs.textContent='none'; return; }
+  cs.textContent = ac.cs;
+  el.innerHTML = `<b>${ac.cs}</b> (${ac.acType}) ${ac.kind.toUpperCase()}<br>
+    HDG ${Math.round(ac.hdg).toString().padStart(3,'0')}° → ${Math.round(ac.tHdg).toString().padStart(3,'0')}°<br>
+    ALT FL${ac.fl.toString().padStart(3,'0')} → FL${Math.round(ac.tAlt/100).toString().padStart(3,'0')}<br>
+    SPD ${Math.round(ac.spd)} → ${Math.round(ac.tSpd)} kts<br>
+    State: <b>${ac.state.toUpperCase()}</b>
+    ${ac.dest ? `<br>Dest: ${ac.dest}` : ''}
+    ${ac.conflict ? '<br><span style="color:#ff4444">⚠ CONFLICT</span>' : ''}`;
+}
+
+function renderMsgs() {
+  const el = document.getElementById('msg-box');
+  el.innerHTML = G.msgs.slice(0,10).map(m=>`<div class="${m.cls}">${m.text}</div>`).join('');
+}
+
+function renderScore() {
+  document.getElementById('score-display').textContent =
+    `SCORE: ${G.score}  |  LANDED: ${G.landed}  |  DEPARTED: ${G.departed}`;
+}
+
+// ============================================================
+//  INPUT
+// ============================================================
+function selectAC(uid) {
+  if (G.selected) G.selected.selected=false;
+  G.selected = G.acs.find(a=>a.uid===uid) || null;
+  renderStrips(); renderAcInfo();
+  document.getElementById('cmd-input').focus();
+}
+
+canvas.addEventListener('click', e => {
+  const r = canvas.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  let best=null, bestD=14;
+  G.acs.forEach(ac => {
+    if (ac.removed) return;
+    const {px,py}=nm2px(ac.x,ac.y);
+    const d=dst(mx,my,px,py);
+    if (d<bestD) { bestD=d; best=ac; }
+  });
+  if (best) {
+    selectAC(best.uid);
+  } else {
+    G.selected=null;
+    document.getElementById('ac-info').innerHTML='—';
+    document.getElementById('sel-cs').textContent='none';
+    renderStrips();
+  }
+});
+
+document.getElementById('cmd-input').addEventListener('keydown', e => {
+  if (e.key==='Enter') {
+    const v = e.target.value.trim();
+    if (v) { parseCmd(v); e.target.value=''; renderStrips(); }
+  }
+  if (e.key==='Escape') {
+    G.selected=null; e.target.value='';
+    document.getElementById('sel-cs').textContent='none';
+    renderStrips(); renderAcInfo();
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (document.activeElement===document.getElementById('cmd-input')) return;
+  if (e.key==='p'||e.key==='P') {
+    G.paused = !G.paused;
+    msg(G.paused ? '⏸ PAUSED' : '▶ RESUMED');
+  }
+  if (e.key==='?'||e.key==='h'||e.key==='H') {
+    document.getElementById('help-overlay').style.display='flex';
+  }
+  if (e.key==='x'||e.key==='X') cycleSpeed();
+});
+
+function cycleSpeed() {
+  CFG.simRateIdx = (CFG.simRateIdx+1) % CFG.simRates.length;
+  document.getElementById('speed-val').textContent = CFG.simRates[CFG.simRateIdx];
+}
+
+function startGame() {
+  document.getElementById('help-overlay').style.display='none';
+  G.started=true;
+  document.getElementById('cmd-input').focus();
+}
+
+// ============================================================
+//  GAME LOOP
+// ============================================================
+let lastT = null;
+
+function loop(ts) {
+  if (!lastT) lastT=ts;
+  const dt = Math.min((ts-lastT)/1000, 0.1);
+  lastT=ts;
+
+  if (!G.paused && G.started) {
+    G.realTime += dt;
+
+    // Spawn
+    if (G.realTime >= G.nextSpawn) {
+      spawn();
+      G.nextSpawn = G.realTime + CFG.spawnMinR + Math.random()*(CFG.spawnMaxR-CFG.spawnMinR);
+    }
+
+    // Sweep
+    G.sweep = normHdg(G.sweep + dt * 55);
+
+    // Update each AC
+    G.acs.forEach(ac => {
+      if (ac.removed) return;
+      ac.update(dt);
+
+      // Landed
+      if (ac.state==='landing') {
+        G.score+=100; G.landed++;
+        msg(`✔ ${ac.cs} LANDED RWY${ac.appRwy} +100pts`, 'msg-ok');
+        freeCS(ac.cs); ac.removed=true;
+        if (G.selected?.uid===ac.uid) G.selected=null;
+        renderScore();
+      }
+
+      // Departure reached waypoint
+      if (!ac.removed && ac.kind==='dep' && ac.dest) {
+        const wp = WP[ac.dest];
+        if (wp && dst(ac.x,ac.y,wp.x,wp.y)<2) {
+          G.score+=50; G.departed++;
+          msg(`✔ ${ac.cs} DEPARTED → ${ac.dest} +50pts`, 'msg-ok');
+          freeCS(ac.cs); ac.removed=true;
+          if (G.selected?.uid===ac.uid) G.selected=null;
+          renderScore();
+        }
+      }
+
+      // Arrival left screen without landing
+      if (!ac.removed && ac.kind==='arr') {
+        const d = dst(ac.x,ac.y,0,0);
+        if (d > CFG.range+4) {
+          G.score-=100;
+          msg(`✘ ${ac.cs} LEFT AIRSPACE -100pts`, 'msg-err');
+          freeCS(ac.cs); ac.removed=true;
+          if (G.selected?.uid===ac.uid) G.selected=null;
+          renderScore();
+        }
+      }
+    });
+
+    G.acs = G.acs.filter(a=>!a.removed);
+    checkConflicts();
+  }
+
+  drawRadar();
+  renderStrips();
+  renderAcInfo();
+  requestAnimationFrame(loop);
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+initCanvas();
+updateScale();
+window.addEventListener('resize', () => { initCanvas(); updateScale(); });
+
+// Initial draw (before game starts)
+drawRadar();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
