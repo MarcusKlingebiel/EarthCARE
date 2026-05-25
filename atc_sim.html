@@ -93,7 +93,7 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
 <body>
 
 <div id="header">
-  <span>⬡ ATC RADAR · EGLL APPROACH CONTROL · 40NM</span>
+  <span>⬡ ATC RADAR · EGLL APPROACH CONTROL · 80NM</span>
   <span id="score-display">SCORE: 0 &nbsp;|&nbsp; LANDED: 0 &nbsp;|&nbsp; DEPARTED: 0</span>
   <span>
     <button id="speed-btn" onclick="cycleSpeed()">SIM ×<span id="speed-val">1</span></button>
@@ -151,12 +151,12 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
 // ============================================================
 const CFG = {
   size: 0,          // set dynamically
-  range: 40,        // nm radius
-  simRate: 60,      // sim-sec per real-sec (base)
-  simRates: [1, 2, 4],
+  range: 80,        // nm radius
+  simRate: 10,      // sim-sec per real-sec (base) — slow & comfortable
+  simRates: [1, 2, 3],
   simRateIdx: 0,
-  spawnMinR: 18,    // real seconds
-  spawnMaxR: 30,
+  spawnMinR: 25,    // real seconds
+  spawnMaxR: 45,
   sepH: 3,          // nm
   sepV: 1000,       // ft
   trailLen: 7,
@@ -217,14 +217,14 @@ const RUNWAYS = [
 const RWY = Object.fromEntries(RUNWAYS.map(r => [r.id, r]));
 
 const WAYPOINTS = [
-  { id:'NORTN', x:  0, y: 35, hdg:180 },
-  { id:'EAST',  x: 35, y:  0, hdg:270 },
-  { id:'SOUTH', x:  0, y:-35, hdg:  0 },
-  { id:'WEST',  x:-35, y:  0, hdg: 90 },
-  { id:'NEE',   x: 27, y: 22, hdg:225 },
-  { id:'SEE',   x: 27, y:-22, hdg:300 },
-  { id:'SWW',   x:-27, y:-22, hdg: 45 },
-  { id:'NWW',   x:-27, y: 22, hdg:135 },
+  { id:'NORTN', x:  0, y: 72, hdg:180 },
+  { id:'EAST',  x: 72, y:  0, hdg:270 },
+  { id:'SOUTH', x:  0, y:-72, hdg:  0 },
+  { id:'WEST',  x:-72, y:  0, hdg: 90 },
+  { id:'NEE',   x: 54, y: 45, hdg:225 },
+  { id:'SEE',   x: 54, y:-45, hdg:300 },
+  { id:'SWW',   x:-54, y:-45, hdg: 45 },
+  { id:'NWW',   x:-54, y: 45, hdg:135 },
 ];
 const WP = Object.fromEntries(WAYPOINTS.map(w => [w.id, w]));
 
@@ -367,7 +367,7 @@ class AC {
     const r = RWY[rwyId];
     if (!r) return false;
     const d = dst(this.x, this.y, r.tx, r.ty);
-    if (d > 32) return false;
+    if (d > 65) return false;
     this.appRwy = rwyId;
     this.state  = 'approach';
     return true;
@@ -386,7 +386,6 @@ const G = {
   msgs:      [],
   realTime:  0,
   nextSpawn: 5,
-  sweep:     0,
   usedCS:    new Set(),
   paused:    false,
   started:   false,
@@ -563,33 +562,13 @@ function drawRadar() {
     ctx.fillText(lbl, CX+Math.sin(rad)*(r-22)-4, CY-Math.cos(rad)*(r-22)+4);
   });
 
-  // Radar sweep
-  const sRad = d2r(G.sweep);
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  ctx.strokeStyle = '#00ff55'; ctx.lineWidth=2;
-  ctx.beginPath();
-  ctx.moveTo(CX, CY);
-  ctx.lineTo(CX+Math.sin(sRad)*CFG.range*PX, CY-Math.cos(sRad)*CFG.range*PX);
-  ctx.stroke();
-  // Sweep glow arc
-  ctx.globalAlpha = 0.07;
-  ctx.fillStyle = '#00ff55';
-  const sweepW = d2r(35);
-  ctx.beginPath();
-  ctx.moveTo(CX,CY);
-  ctx.arc(CX,CY, CFG.range*PX, sRad-Math.PI/2-sweepW, sRad-Math.PI/2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
   // ILS feathers (dashed extended centerline)
   ctx.setLineDash([5,5]);
   ctx.strokeStyle='#0d2d0d'; ctx.lineWidth=1;
   // RWY 27: extends east from (4,0)
-  drawLine(4,0, 26,0);
+  drawLine(4,0, 55,0);
   // RWY 18: extends north from (0,4)
-  drawLine(0,4, 0,26);
+  drawLine(0,4, 0,55);
   ctx.setLineDash([]);
 
   // Runways
@@ -836,9 +815,6 @@ function loop(ts) {
       G.nextSpawn = G.realTime + CFG.spawnMinR + Math.random()*(CFG.spawnMaxR-CFG.spawnMinR);
     }
 
-    // Sweep
-    G.sweep = normHdg(G.sweep + dt * 55);
-
     // Update each AC
     G.acs.forEach(ac => {
       if (ac.removed) return;
@@ -868,7 +844,7 @@ function loop(ts) {
       // Arrival left screen without landing
       if (!ac.removed && ac.kind==='arr') {
         const d = dst(ac.x,ac.y,0,0);
-        if (d > CFG.range+4) {
+        if (d > CFG.range+6) {
           G.score-=100;
           msg(`✘ ${ac.cs} LEFT AIRSPACE -100pts`, 'msg-err');
           freeCS(ac.cs); ac.removed=true;
