@@ -171,8 +171,11 @@ function initCanvas() {
   const avail = Math.min(window.innerHeight - headerH, window.innerWidth - sidebar);
   CFG.size = Math.floor(avail);
   const c = document.getElementById('radar');
-  c.width = CFG.size;
+  c.width  = CFG.size;
   c.height = CFG.size;
+  // Explicit CSS size prevents browser from scaling the canvas differently
+  c.style.width  = CFG.size + 'px';
+  c.style.height = CFG.size + 'px';
 }
 
 let PX, CX, CY;
@@ -735,16 +738,20 @@ function renderScore() {
 //  INPUT
 // ============================================================
 function selectAC(uid) {
-  if (G.selected) G.selected.selected=false;
-  G.selected = G.acs.find(a=>a.uid===uid) || null;
+  G.selected = G.acs.find(a=>a.uid===uid && !a.removed) || null;
   renderStrips(); renderAcInfo();
   document.getElementById('cmd-input').focus();
 }
 
 canvas.addEventListener('click', e => {
   const r = canvas.getBoundingClientRect();
-  const mx=e.clientX-r.left, my=e.clientY-r.top;
-  let best=null, bestD=14;
+  // Scale from CSS pixels → canvas pixels (handles any browser scaling)
+  const scaleX = canvas.width  / r.width;
+  const scaleY = canvas.height / r.height;
+  const mx = (e.clientX - r.left) * scaleX;
+  const my = (e.clientY - r.top)  * scaleY;
+
+  let best=null, bestD=22;   // 22 px hit radius — generous for easy clicking
   G.acs.forEach(ac => {
     if (ac.removed) return;
     const {px,py}=nm2px(ac.x,ac.y);
