@@ -115,7 +115,7 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
     <div id="cmd-bar">
       <div id="cmd-label">CMD › <span id="sel-cs" style="color:#aaffaa">none</span></div>
       <input id="cmd-input" type="text"
-        placeholder="h 270 · a 090 · s 250 · app 27" autocomplete="off" spellcheck="false">
+        placeholder="h 270 · a 030 · s 200 · app 27L" autocomplete="off" spellcheck="false">
     </div>
   </div>
 </div>
@@ -125,19 +125,27 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
   <div id="help-box">
     <h2>ATC RADAR SIMULATOR</h2>
     <table>
-      <tr><td>h [deg]</td><td>Fly heading (e.g. h 270)</td></tr>
-      <tr><td>a [FL]</td><td>Climb/descend (e.g. a 080 = FL080)</td></tr>
-      <tr><td>s [kts]</td><td>Set speed (e.g. s 250)</td></tr>
-      <tr><td>app [rwy]</td><td>Clear for ILS approach (app 27)</td></tr>
-      <tr><td>l / r [deg]</td><td>Turn left/right 30° (or specify deg)</td></tr>
-      <tr><td>Click aircraft</td><td>Select &amp; show info</td></tr>
-      <tr><td>P</td><td>Pause/resume</td></tr>
-      <tr><td>? or H</td><td>Show this help</td></tr>
+      <tr><td>h [deg]</td><td>Fly heading &nbsp;→ h 270</td></tr>
+      <tr><td>a [FL]</td><td>Altitude &nbsp;→ a 080 (= FL080 = 8000ft)</td></tr>
+      <tr><td>s [kts]</td><td>Speed &nbsp;→ s 220</td></tr>
+      <tr><td>l / r [deg]</td><td>Turn left/right 30° &nbsp;→ l 45</td></tr>
+      <tr><td>app [rwy]</td><td>Clear for ILS &nbsp;→ app 27L</td></tr>
+      <tr><td>P / X</td><td>Pause / cycle sim speed</td></tr>
     </table>
-    <p style="margin-top:10px;color:#1a8a1a;font-size:11px">
-      Route arrivals (blue) to ILS approach for RWY 27 or 18.<br>
-      Route departures (orange) toward any edge waypoint.<br>
-      Maintain 3nm / 1000ft separation between all aircraft.
+
+    <p style="margin-top:14px;color:#44ff88;font-size:12px;font-weight:bold">HOW TO LAND AN AIRCRAFT</p>
+    <p style="color:#22cc22;font-size:11px;line-height:1.7">
+      1. <b>Click</b> the blue arrival aircraft (or its strip on the right)<br>
+      2. Type <b>h 270</b> to point it toward the runway from the east<br>
+      3. Descend: type <b>a 030</b> (= 3000 ft) while still 10–20nm out<br>
+      4. Type <b>app 27L</b> — aircraft intercepts the dashed ILS line<br>
+         and auto-lands. ↘ = intercepting, ▼ = on final.<br>
+      <span style="color:#aaffaa">Runways: 27L · 27R · 09L · 09R · 18 · 36 · 14 · 32<br>
+      Also works: app 27 (= 27L), app 9 (= 09R)</span>
+    </p>
+    <p style="margin-top:8px;color:#1a8a1a;font-size:11px">
+      Arrivals (blue) must land. Departures (orange) route to edge waypoints.<br>
+      Keep 3nm / 1000ft separation between all aircraft.
     </p>
     <button id="start-btn" onclick="startGame()">▶ START GAME</button>
   </div>
@@ -209,10 +217,17 @@ function bearing(fx, fy, tx, ty) {
 //  AIRPORT
 // ============================================================
 const RUNWAYS = [
-  { id:'27', hdg:270, tx: 4, ty:  0 },
-  { id:'09', hdg: 90, tx:-4, ty:  0 },
-  { id:'18', hdg:180, tx: 0, ty:  4 },
-  { id:'36', hdg:360, tx: 0, ty: -4 },
+  // Parallel E-W pair (main)
+  { id:'27L', hdg:270, tx: 4, ty:  1.8 },
+  { id:'27R', hdg:270, tx: 4, ty: -1.8 },
+  { id:'09L', hdg: 90, tx:-4, ty: -1.8 },
+  { id:'09R', hdg: 90, tx:-4, ty:  1.8 },
+  // N-S runway
+  { id:'18',  hdg:180, tx: 1.5, ty:  4  },
+  { id:'36',  hdg:360, tx:-1.5, ty: -4  },
+  // Diagonal NW-SE
+  { id:'14',  hdg:140, tx:  2.5, ty:  2.5 },
+  { id:'32',  hdg:320, tx: -2.5, ty: -2.5 },
 ];
 const RWY = Object.fromEntries(RUNWAYS.map(r => [r.id, r]));
 
@@ -497,12 +512,17 @@ function parseCmd(raw) {
       break;
     }
     case 'app': case 'ils': case 'approach': {
-      const rId = (arg||'27').toUpperCase();
-      if (!RWY[rId]) { msg(`Unknown runway ${rId}`, 'msg-warn'); return; }
+      // Aliases: '27'→'27L', '09'/'9'→'09R', bare number → preferred runway
+      const ALIASES = {'27':'27L','9':'09R','09':'09R','36':'36','18':'18','14':'14','32':'32'};
+      let rId = (arg || '27L').toUpperCase();
+      if (ALIASES[rId]) rId = ALIASES[rId];
+      if (!RWY[rId]) {
+        msg(`Unknown runway "${rId}". Try: 27L 27R 09L 09R 18 36 14 32`, 'msg-warn'); return;
+      }
       if (ac.clearApp(rId)) {
-        msg(`${ac.cs}: CLEARED ILS RWY ${rId}`, 'msg-ok');
+        msg(`${ac.cs}: CLEARED ILS RWY ${rId} — watch for ↘ then ▼`, 'msg-ok');
       } else {
-        msg(`${ac.cs}: Too far for ILS RWY ${rId} (max 32nm)`, 'msg-warn');
+        msg(`${ac.cs}: Too far for ILS RWY ${rId} (must be within 65nm)`, 'msg-warn');
       }
       break;
     }
@@ -562,34 +582,40 @@ function drawRadar() {
     ctx.fillText(lbl, CX+Math.sin(rad)*(r-22)-4, CY-Math.cos(rad)*(r-22)+4);
   });
 
-  // ILS feathers (dashed extended centerline)
-  ctx.setLineDash([5,5]);
-  ctx.strokeStyle='#0d2d0d'; ctx.lineWidth=1;
-  // RWY 27: extends east from (4,0)
-  drawLine(4,0, 55,0);
-  // RWY 18: extends north from (0,4)
-  drawLine(0,4, 0,55);
+  // ILS feathers (dashed extended centreline for each landing direction)
+  ctx.setLineDash([5,5]); ctx.lineWidth=1;
+  [
+    // [from_x, from_y, to_x, to_y, colour]
+    [RWY['27L'].tx, RWY['27L'].ty,  55, RWY['27L'].ty, '#0d2d18'],
+    [RWY['27R'].tx, RWY['27R'].ty,  55, RWY['27R'].ty, '#0d2d18'],
+    [RWY['18'].tx,  RWY['18'].ty,   RWY['18'].tx,  55, '#0d2d0d'],
+    // RWY 14: localizer extends NW (opposite of hdg 140 = 320)
+    [RWY['14'].tx,  RWY['14'].ty,
+     RWY['14'].tx + sin(320)*50, RWY['14'].ty + cos(320)*50, '#1a2d0d'],
+  ].forEach(([x1,y1,x2,y2,col]) => {
+    ctx.strokeStyle=col; drawLine(x1,y1,x2,y2);
+  });
   ctx.setLineDash([]);
 
-  // Runways
-  RUNWAYS.slice(0,2).forEach(r => {  // 09/27
-    ctx.strokeStyle='#1a5a1a'; ctx.lineWidth=4;
-    const hl = 2.8;
+  // Runways — draw all, main E-W pair thicker
+  RUNWAYS.forEach((r, i) => {
+    const isMain = i < 4;
+    ctx.strokeStyle = isMain ? '#1a6a1a' : '#156015';
+    ctx.lineWidth   = isMain ? 5 : 3;
+    const hl = 2.6;
     drawLine(r.tx - sin(r.hdg)*hl, r.ty - cos(r.hdg)*hl,
              r.tx + sin(r.hdg)*hl, r.ty + cos(r.hdg)*hl);
   });
-  RUNWAYS.slice(2,4).forEach(r => {  // 18/36
-    ctx.strokeStyle='#156015'; ctx.lineWidth=3;
-    const hl=2.8;
-    drawLine(r.tx-sin(r.hdg)*hl, r.ty-cos(r.hdg)*hl,
-             r.tx+sin(r.hdg)*hl, r.ty+cos(r.hdg)*hl);
+
+  // Runway labels (at the landing threshold end)
+  ctx.fillStyle='#3a9a3a'; ctx.font='bold 9px Courier New';
+  RUNWAYS.forEach(r => {
+    // Label at threshold side (opposite direction of landing = outward along localizer)
+    const lx = r.tx + sin(normHdg(r.hdg+180)) * 3.5;
+    const ly = r.ty + cos(normHdg(r.hdg+180)) * 3.5;
+    const { px, py } = nm2px(lx, ly);
+    ctx.fillText(r.id, px-8, py+3);
   });
-  // Rwy labels
-  ctx.fillStyle='#2a7a2a'; ctx.font='9px Courier New';
-  const r27=RWY['27']; const p27=nm2px(r27.tx+3.2,r27.ty);
-  ctx.fillText('27',p27.px-6,p27.py+3);
-  const p09=RWY['09']; const pp09=nm2px(p09.tx-3.8,p09.ty);
-  ctx.fillText('09',pp09.px-4,pp09.py+3);
 
   // Waypoints (triangle symbol)
   WAYPOINTS.forEach(wp => {
@@ -602,14 +628,10 @@ function drawRadar() {
     ctx.fillText(wp.id, px+7, py+4);
   });
 
-  // Airport center
+  // Airport: small dot only (runways already show the position)
   const { px:ax, py:ay } = nm2px(0,0);
-  ctx.strokeStyle='#2a8a2a'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.arc(ax,ay,10,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(ax,ay-10); ctx.lineTo(ax,ay+10);
-  ctx.moveTo(ax-10,ay); ctx.lineTo(ax+10,ay);
-  ctx.stroke();
+  ctx.fillStyle='#2a6a2a';
+  ctx.beginPath(); ctx.arc(ax,ay,3,0,Math.PI*2); ctx.fill();
 
   // Aircraft
   G.acs.forEach(ac => {
