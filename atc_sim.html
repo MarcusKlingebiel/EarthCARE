@@ -182,7 +182,8 @@ canvas.level-up {
 // ============================================================
 const CFG = {
   size: 0,
-  range: 80,
+  range:    80,   // current zoom radius (changes with scroll)
+  boundary: 80,   // fixed game boundary half-side in nm — never changes
   simRate: 10,
   simRates: [1, 2, 3],
   simRateIdx: 0,
@@ -765,16 +766,28 @@ function drawRadar() {
   ctx.fillRect(0, 0, S, SH);
 
   // Range rings
+  ctx.lineWidth = 1;
   for (let r=10; r<=CFG.range; r+=10) {
-    const isBoundary = r === CFG.range;
-    ctx.lineWidth   = isBoundary ? 2 : 1;
-    ctx.strokeStyle = isBoundary ? '#2a6a2a' : (r===20 ? '#0d1f0d' : '#091509');
+    ctx.strokeStyle = r===20 ? '#0d1f0d' : '#091509';
     ctx.beginPath();
     ctx.arc(CX, CY, r*PX, 0, Math.PI*2);
     ctx.stroke();
-    ctx.fillStyle = isBoundary ? '#3a9a3a' : '#0f2f0f';
-    ctx.font = isBoundary ? 'bold 9px Courier New' : '9px Courier New';
-    ctx.fillText(isBoundary ? `${r}nm BOUNDARY` : `${r}nm`, CX+r*PX+3, CY-3);
+    ctx.fillStyle = '#0f2f0f';
+    ctx.font = '9px Courier New';
+    ctx.fillText(`${r}nm`, CX+r*PX+3, CY-3);
+  }
+
+  // Airspace boundary (fixed rectangle, visible even when zoomed in/out)
+  {
+    const b = CFG.boundary * PX;
+    ctx.setLineDash([8, 4]);
+    ctx.strokeStyle = '#2a6a2a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(CX - b, CY - b, b * 2, b * 2);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#3a9a3a';
+    ctx.font = 'bold 9px Courier New';
+    ctx.fillText('BOUNDARY', CX + b + 4, CY - b + 12);
   }
 
   // Cardinal ticks & labels
@@ -1217,10 +1230,9 @@ function loop(ts) {
         }
       }
 
-      // Arrival left screen without landing
+      // Arrival left airspace (rectangular boundary — independent of zoom)
       if (!ac.removed && ac.kind==='arr') {
-        const d = dst(ac.x,ac.y,0,0);
-        if (d > CFG.range+6) {
+        if (Math.abs(ac.x) > CFG.boundary+6 || Math.abs(ac.y) > CFG.boundary+6) {
           G.score-=100;
           msg(`✘ ${ac.cs} LEFT AIRSPACE -100pts`, 'msg-err');
           freeCS(ac.cs); ac.removed=true;
