@@ -418,6 +418,7 @@ const WIND = {
 };
 
 function initWind() {
+  if (RUNWAYS.length === 0) return;
   WIND.from = Math.floor(Math.random() * 36) * 10;
   WIND.spd  = 5 + Math.floor(Math.random() * 20);
 
