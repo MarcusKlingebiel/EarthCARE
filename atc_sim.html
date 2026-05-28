@@ -546,7 +546,7 @@ class AC {
     }
 
     // Feature 3: Emergency countdown → crash on expiry
-    if (this.emergency && this.state !== 'final' && this.state !== 'landing') {
+    if (this.emergency && this.state !== 'landing') {
       this.emergencyTimer -= sdt;
       if (this.emergencyTimer <= 0 && !this.emergencyWarned) {
         this.emergencyWarned = true;
