@@ -1190,6 +1190,7 @@ document.getElementById('cmd-input').addEventListener('keydown', e => {
     if (v) { parseCmd(v); e.target.value=''; renderStrips(); }
   }
   if (e.key==='Escape') {
+    document.getElementById('help-overlay').style.display='none';
     G.selected=null; e.target.value='';
     document.getElementById('sel-cs').textContent='none';
     renderStrips(); renderAcInfo();
@@ -1197,14 +1198,20 @@ document.getElementById('cmd-input').addEventListener('keydown', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (document.activeElement===document.getElementById('cmd-input')) return;
+  // P pauses regardless of focus
   if (e.key==='p'||e.key==='P') {
+    if (document.activeElement===document.getElementById('cmd-input')) e.preventDefault();
     G.paused = !G.paused;
     msg(G.paused ? '⏸ PAUSED' : '▶ RESUMED');
+    return;
   }
-  if (e.key==='?'||e.key==='h'||e.key==='H') {
+  // H opens help regardless of focus (but not when typing a heading cmd)
+  if ((e.key==='h'||e.key==='H') && document.activeElement!==document.getElementById('cmd-input')) {
     document.getElementById('help-overlay').style.display='flex';
+    return;
   }
+  if (document.activeElement===document.getElementById('cmd-input')) return;
+  if (e.key==='?') document.getElementById('help-overlay').style.display='flex';
   if (e.key==='x'||e.key==='X') cycleSpeed();
 });
 
