@@ -439,10 +439,12 @@ class AC {
       }
     }
 
-    // Altitude (2000 ft/min)
+    // Altitude — faster on approach/final
     const dAlt = this.tAlt - this.alt;
+    const vspd = (this.state === 'final' || this.state === 'approach') && dAlt < 0
+      ? 4500 : 2500;
     if (Math.abs(dAlt) > 5) {
-      this.alt += Math.sign(dAlt) * Math.min(2000/60*sdt, Math.abs(dAlt));
+      this.alt += Math.sign(dAlt) * Math.min(vspd/60*sdt, Math.abs(dAlt));
     } else {
       this.alt = this.tAlt;
     }
@@ -467,7 +469,12 @@ class AC {
     // Landing check
     if (this.state === 'final' && this.appRwy) {
       const r = RWY[this.appRwy];
-      if (dst(this.x,this.y, r.tx,r.ty) < 0.35 && this.alt < 500) {
+      const d = dst(this.x, this.y, r.tx, r.ty);
+      const outHdg = normHdg(r.hdg + 180);
+      const lcx = sin(outHdg), lcy = cos(outHdg);
+      const dx = this.x - r.tx, dy = this.y - r.ty;
+      const along = lcx*dx + lcy*dy;
+      if ((d < 0.6 && this.alt < 800) || (along < 0 && this.alt < 1500)) {
         this.state = 'landing';
       }
     }
@@ -518,7 +525,8 @@ class AC {
     if (this.state === 'final') {
       this.tHdg = r.hdg;
       const gsAlt = Math.max(0, dToThr * 318);
-      this.tAlt = gsAlt;
+      // Only ratchet down — don't pull aircraft back up if it dips below glideslope
+      this.tAlt = Math.min(this.tAlt, gsAlt);
       if (dToThr < 10) this.tSpd = Math.min(this.tSpd, 200);
       if (dToThr <  5) this.tSpd = Math.min(this.tSpd, 165);
       if (dToThr <  2) this.tSpd = Math.min(this.tSpd, 145);
@@ -798,7 +806,7 @@ function drawRadar() {
     const isPref = WIND.preferredRwys.includes(r.id);
     ctx.strokeStyle = isPref ? '#44ff44' : (isMain ? '#1a6a1a' : '#156015');
     ctx.lineWidth   = isMain ? 5 : 3;
-    const hl = 2.6;
+    const hl = i < 4 ? 4.0 : (i < 6 ? 3.5 : 3.0);
     drawLine(r.tx - sin(r.hdg)*hl, r.ty - cos(r.hdg)*hl,
              r.tx + sin(r.hdg)*hl, r.ty + cos(r.hdg)*hl);
   });
