@@ -1341,20 +1341,15 @@ document.getElementById('cmd-input').addEventListener('keydown', e => {
 });
 
 document.addEventListener('keydown', e => {
-  // P pauses regardless of focus
+  const inInput = document.activeElement === document.getElementById('cmd-input');
+  if (inInput) return;
   if (e.key==='p'||e.key==='P') {
-    if (document.activeElement===document.getElementById('cmd-input')) e.preventDefault();
     G.paused = !G.paused;
     msg(G.paused ? '⏸ PAUSED' : '▶ RESUMED');
-    return;
   }
-  // H opens help regardless of focus (but not when typing a heading cmd)
-  if ((e.key==='h'||e.key==='H') && document.activeElement!==document.getElementById('cmd-input')) {
+  if (e.key==='h'||e.key==='H'||e.key==='?') {
     document.getElementById('help-overlay').style.display='flex';
-    return;
   }
-  if (document.activeElement===document.getElementById('cmd-input')) return;
-  if (e.key==='?') document.getElementById('help-overlay').style.display='flex';
   if (e.key==='x'||e.key==='X') cycleSpeed();
 });
 
