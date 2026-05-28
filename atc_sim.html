@@ -18,8 +18,12 @@ body {
   display:flex; justify-content:space-between; align-items:center;
   font-size:12px; background:#020a02; flex-shrink:0;
 }
-#main { display:flex; flex:1; overflow:hidden; }
-canvas { display:block; cursor:crosshair; flex-shrink:0; transition:box-shadow 0.1s; }
+#main { display:flex; flex:1; overflow:hidden; position:relative; }
+canvas {
+  display:block; cursor:crosshair;
+  flex:1; min-width:0; height:100%;
+  transition:box-shadow 0.1s;
+}
 canvas.level-up {
   animation: levelFlash 1.5s ease-out forwards;
 }
@@ -29,9 +33,9 @@ canvas.level-up {
   100% { box-shadow: none; }
 }
 #sidebar {
-  width:170px; border-left:1px solid #0a2a0a;
+  width:155px; border-left:1px solid #0a2a0a;
   display:flex; flex-direction:column; overflow:hidden;
-  background:#010801;
+  background:#010801; flex-shrink:0;
 }
 #sidebar-title {
   padding:3px 5px; font-size:10px;
@@ -50,13 +54,17 @@ canvas.level-up {
 .strip.dep { border-left:3px solid #ffaa33; }
 .strip.warn { border-left:3px solid #ff3333; animation:blink .5s infinite; }
 .strip.emergency { border-left:3px solid #ff0000 !important; background:#1a0000 !important; animation:blink .35s infinite; }
-#info-panel {
-  border-top:1px solid #0a2a0a; padding:4px 5px; font-size:10px;
-  line-height:1.55; min-height:90px;
+/* Floating overlays on the canvas */
+#ac-overlay {
+  position:absolute; top:8px; left:8px;
+  background:rgba(1,8,1,.88); border:1px solid #1a4a1a;
+  padding:5px 7px; font-size:10px; line-height:1.6;
+  pointer-events:none; min-width:130px; display:none;
 }
-#msg-box {
-  border-top:1px solid #0a2a0a; height:52px;
-  overflow-y:auto; padding:2px 4px; font-size:9px;
+#msg-overlay {
+  position:absolute; bottom:8px; left:8px;
+  font-size:9px; line-height:1.5;
+  pointer-events:none; max-width:340px;
 }
 .msg-ok   { color:#44ff44; }
 .msg-warn { color:#ffaa00; }
@@ -117,14 +125,13 @@ canvas.level-up {
 <div id="main">
   <canvas id="radar"></canvas>
 
+  <!-- floating overlays on the canvas -->
+  <div id="ac-overlay"></div>
+  <div id="msg-overlay"></div>
+
   <div id="sidebar">
-    <div id="sidebar-title">FLIGHT STRIPS</div>
+    <div id="sidebar-title">STRIPS</div>
     <div id="strip-list"></div>
-    <div id="info-panel">
-      <div style="color:#1a8a1a;margin-bottom:3px">SELECTED</div>
-      <div id="ac-info">—</div>
-    </div>
-    <div id="msg-box"></div>
     <div id="cmd-bar">
       <div id="cmd-label">CMD › <span id="sel-cs" style="color:#aaffaa">none</span></div>
       <input id="cmd-input" type="text"
@@ -189,20 +196,19 @@ const CFG = {
 };
 
 function initCanvas() {
-  const sidebar = 170;
-  const headerH = document.getElementById('header').offsetHeight;
-  const avail = Math.min(window.innerHeight - headerH, window.innerWidth - sidebar);
-  CFG.size = Math.floor(avail);
+  // Let flex resolve first, then read actual pixel dimensions
   const c = document.getElementById('radar');
-  c.width = CFG.size;
-  c.height = CFG.size;
+  c.width  = c.offsetWidth  || (window.innerWidth - 155);
+  c.height = c.offsetHeight || (window.innerHeight - document.getElementById('header').offsetHeight);
 }
 
 let PX, CX, CY;
 function updateScale() {
-  PX = CFG.size / 2 / CFG.range;
-  CX = CFG.size / 2;
-  CY = CFG.size / 2;
+  const c = document.getElementById('radar');
+  CX = c.width  / 2;
+  CY = c.height / 2;
+  // Keep radar circle fitting inside the canvas (based on shorter side)
+  PX = Math.min(c.width, c.height) / 2 / CFG.range;
 }
 
 // ============================================================
@@ -1043,29 +1049,32 @@ ${icon} <b${emgStyle}>${ac.cs}</b> <span style="color:#${isEmg?'ff2222':'1a7a1a'
 
 function renderAcInfo() {
   const ac = G.selected;
-  const el = document.getElementById('ac-info');
+  const ov = document.getElementById('ac-overlay');
   const cs = document.getElementById('sel-cs');
-  if (!ac||ac.removed) { el.innerHTML='—'; cs.textContent='none'; return; }
+  if (!ac||ac.removed) {
+    ov.style.display='none'; cs.textContent='none'; return;
+  }
   cs.textContent = ac.cs;
   const h = n => n.toString().padStart(3,'0');
-  el.innerHTML =
-    `<b>${ac.cs}</b> ${ac.acType} ${ac.kind==='arr'?'ARR':'DEP'}<br>` +
-    `H ${h(Math.round(ac.hdg))}→${h(Math.round(ac.tHdg))}<br>` +
-    `A FL${h(ac.fl)}→${h(Math.round(ac.tAlt/100))}<br>` +
+  ov.style.display = 'block';
+  ov.innerHTML =
+    `<span style="color:#aaffaa"><b>${ac.cs}</b> ${ac.acType} ${ac.kind==='arr'?'ARR':'DEP'}</span><br>` +
+    `H ${h(Math.round(ac.hdg))}→${h(Math.round(ac.tHdg))}°<br>` +
+    `A FL${h(ac.fl)}→FL${h(Math.round(ac.tAlt/100))}<br>` +
     `S ${Math.round(ac.spd)}→${Math.round(ac.tSpd)}kt<br>` +
     `<b>${ac.state.toUpperCase()}</b>` +
     (ac.appRwy  ? ` RWY${ac.appRwy}` : '') +
-    (ac.dest    ? `<br>→ ${ac.dest}` : '') +
-    (ac.holding ? '<br><span style="color:#44ff44">HOLDING</span>' : '') +
-    (ac.directTo? `<br>DIRECT ${ac.directTo}` : '') +
+    (ac.dest    ? `  →${ac.dest}` : '') +
+    (ac.holding ? ' <span style="color:#44ff44">HOLD</span>' : '') +
+    (ac.directTo? ` <span style="color:#aaffaa">DCT ${ac.directTo}</span>` : '') +
     (ac.emergency && ac.emergencyTimer>0 ?
       `<br><span style="color:#ff0000">⚡ MAYDAY ${Math.ceil(ac.emergencyTimer)}s</span>` : '') +
     (ac.conflict ? '<br><span style="color:#ff4444">⚠ CONFLICT</span>' : '');
 }
 
 function renderMsgs() {
-  const el = document.getElementById('msg-box');
-  el.innerHTML = G.msgs.slice(0,10).map(m=>`<div class="${m.cls}">${m.text}</div>`).join('');
+  const el = document.getElementById('msg-overlay');
+  el.innerHTML = G.msgs.slice(0,6).map(m=>`<div class="${m.cls}">${m.text}</div>`).join('');
 }
 
 function renderScore() {
@@ -1097,7 +1106,7 @@ canvas.addEventListener('click', e => {
     selectAC(best.uid);
   } else {
     G.selected=null;
-    document.getElementById('ac-info').innerHTML='—';
+    document.getElementById('ac-overlay').style.display='none';
     document.getElementById('sel-cs').textContent='none';
     renderStrips();
   }
@@ -1223,14 +1232,17 @@ function loop(ts) {
 // ============================================================
 //  INIT
 // ============================================================
-initCanvas();
-updateScale();
 initWind();
-window.addEventListener('resize', () => { initCanvas(); updateScale(); });
-
-// Initial draw (before game starts)
-drawRadar();
-requestAnimationFrame(loop);
+// Wait one frame so flex layout resolves before reading canvas dimensions
+requestAnimationFrame(() => {
+  initCanvas();
+  updateScale();
+  drawRadar();
+  requestAnimationFrame(loop);
+});
+window.addEventListener('resize', () => {
+  initCanvas(); updateScale();
+});
 </script>
 </body>
 </html>
