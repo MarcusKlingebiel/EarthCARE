@@ -882,12 +882,12 @@ function drawRadar() {
     });
     ctx.globalAlpha=1;
 
-    // Velocity vector (3 sim-min projection)
-    const proj = 3 * 60 / 3600 * ac.spd * CFG.simRate;
-    ctx.strokeStyle=col; ctx.globalAlpha=0.35; ctx.lineWidth=1;
+    // Short direction tick
+    const tx = sin(ac.hdg), ty = cos(ac.hdg);
+    ctx.strokeStyle=col; ctx.globalAlpha=0.8; ctx.lineWidth=1.5;
     ctx.beginPath();
-    ctx.moveTo(px,py);
-    ctx.lineTo(px + sin(ac.hdg)*proj*PX, py - cos(ac.hdg)*proj*PX);
+    ctx.moveTo(px + tx*5,  py - ty*5);
+    ctx.lineTo(px + tx*14, py - ty*14);
     ctx.stroke();
     ctx.globalAlpha=1;
 
