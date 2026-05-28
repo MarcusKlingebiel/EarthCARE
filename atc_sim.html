@@ -107,12 +107,29 @@ canvas.level-up {
 }
 #speed-btn:hover { border-color:#33ff33; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+#airport-overlay {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,.96); display:flex; align-items:center;
+  justify-content:center; z-index:20;
+}
+#airport-box {
+  border:1px solid #1a6a1a; padding:24px 32px; max-width:480px; width:90%;
+}
+#airport-box h2 { color:#44ff44; margin-bottom:8px; font-size:18px; text-align:center; }
+#airport-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+.ap-btn {
+  background:#0a1a0a; border:1px solid #1a4a1a; color:#33ff33;
+  font-family:'Courier New',monospace; font-size:13px; cursor:pointer;
+  padding:10px 8px; text-align:left; line-height:1.5;
+}
+.ap-btn:hover { background:#0f2a0f; border-color:#44ff44; }
+.ap-btn .icao { color:#1a8a1a; font-size:11px; }
 </style>
 </head>
 <body>
 
 <div id="header">
-  <span>⬡ ATC RADAR · EGLL APPROACH CONTROL · 80NM</span>
+  <span>⬡ ATC RADAR · <span id="airport-name">---</span> · 120NM</span>
   <span id="score-display">SCORE: 0 &nbsp;|&nbsp; LANDED: 0 &nbsp;|&nbsp; DEPARTED: 0</span>
   <span id="level-display" style="color:#44ff44;font-weight:bold">LEVEL 1</span>
   <span id="wind-display" style="color:#aaffaa">WND ---/--</span>
@@ -141,7 +158,22 @@ canvas.level-up {
 </div>
 
 <!-- Help overlay -->
-<div id="help-overlay">
+<div id="airport-overlay">
+  <div id="airport-box">
+    <h2>ATC RADAR SIMULATOR</h2>
+    <p style="color:#1a8a1a;text-align:center;font-size:13px;margin-bottom:4px">SELECT AIRPORT</p>
+    <div id="airport-grid">
+      <button class="ap-btn" onclick="selectAirport('EDDF')">Frankfurt<br><span class="icao">EDDF · Germany</span></button>
+      <button class="ap-btn" onclick="selectAirport('EDDM')">München<br><span class="icao">EDDM · Germany</span></button>
+      <button class="ap-btn" onclick="selectAirport('EDDP')">Leipzig<br><span class="icao">EDDP · Germany</span></button>
+      <button class="ap-btn" onclick="selectAirport('EDDH')">Hamburg<br><span class="icao">EDDH · Germany</span></button>
+      <button class="ap-btn" onclick="selectAirport('EDDV')">Hannover<br><span class="icao">EDDV · Germany</span></button>
+      <button class="ap-btn" onclick="selectAirport('KDEN')">Denver<br><span class="icao">KDEN · USA</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="help-overlay" style="display:none">
   <div id="help-box">
     <h2>ATC RADAR SIMULATOR</h2>
     <table>
@@ -162,7 +194,7 @@ canvas.level-up {
       3. Descend: type <b>a 030</b> (= 3000 ft) while still 10–20nm out<br>
       4. Type <b>app 27L</b> — aircraft intercepts the dashed ILS line<br>
          and auto-lands. ↘ = intercepting, ▼ = on final.<br>
-      <span style="color:#aaffaa">Runways: 27L · 27R · 09L · 09R · 18 · 36 · 14 · 32</span>
+      <span id="rwy-list" style="color:#aaffaa"></span>
     </p>
     <p style="margin-top:6px;color:#1a8a1a;font-size:11px">
       Arrivals (blue strip) must land. Departures (orange strip) route to edge waypoints.<br>
@@ -183,7 +215,7 @@ canvas.level-up {
 const CFG = {
   size: 0,
   range:    80,   // current zoom radius (changes with scroll)
-  boundary: 80,   // fixed game boundary half-side in nm — never changes
+  boundary: 120,   // fixed game boundary half-side in nm — never changes
   simRate: 10,
   simRates: [1, 2, 3],
   simRateIdx: 0,
@@ -235,31 +267,146 @@ function bearing(fx, fy, tx, ty) {
 }
 
 // ============================================================
-//  AIRPORT
+//  AIRPORTS
 // ============================================================
-const RUNWAYS = [
-  { id:'27L', hdg:270, tx: 4, ty:  1.8 },
-  { id:'27R', hdg:270, tx: 4, ty: -1.8 },
-  { id:'09L', hdg: 90, tx:-4, ty: -1.8 },
-  { id:'09R', hdg: 90, tx:-4, ty:  1.8 },
-  { id:'18',  hdg:180, tx: 1.5, ty:  4  },
-  { id:'36',  hdg:360, tx:-1.5, ty: -4  },
-  { id:'14',  hdg:140, tx:  2.5, ty:  2.5 },
-  { id:'32',  hdg:320, tx: -2.5, ty: -2.5 },
-];
-const RWY = Object.fromEntries(RUNWAYS.map(r => [r.id, r]));
+let RUNWAYS = [], WAYPOINTS = [];
+let RWY = {}, WP = {};
 
-const WAYPOINTS = [
-  { id:'NORTN', x:  0, y: 72, hdg:180 },
-  { id:'EAST',  x: 72, y:  0, hdg:270 },
-  { id:'SOUTH', x:  0, y:-72, hdg:  0 },
-  { id:'WEST',  x:-72, y:  0, hdg: 90 },
-  { id:'NEE',   x: 54, y: 45, hdg:225 },
-  { id:'SEE',   x: 54, y:-45, hdg:300 },
-  { id:'SWW',   x:-54, y:-45, hdg: 45 },
-  { id:'NWW',   x:-54, y: 45, hdg:135 },
-];
-const WP = Object.fromEntries(WAYPOINTS.map(w => [w.id, w]));
+const AIRPORTS = {
+  EDDF: {
+    name: 'Frankfurt',
+    runways: [
+      { id:'25L', hdg:250, tx: 5.5, ty: 2.5, hl:4.5 },
+      { id:'25C', hdg:250, tx: 5.5, ty: 0,   hl:4.5 },
+      { id:'25R', hdg:250, tx: 5.5, ty:-2.5, hl:4.5 },
+      { id:'07L', hdg: 70, tx:-5.5, ty: 2.5, hl:4.5 },
+      { id:'07C', hdg: 70, tx:-5.5, ty: 0,   hl:4.5 },
+      { id:'18',  hdg:180, tx: 2,   ty: 5.5, hl:3.5 },
+    ],
+    waypoints: [
+      { id:'TOBUT', x:  0, y: 80, hdg:180 },
+      { id:'ANEKI', x: 56, y: 56, hdg:225 },
+      { id:'KERAX', x: 80, y:  0, hdg:270 },
+      { id:'ERNAS', x: 56, y:-56, hdg:315 },
+      { id:'SOSIM', x:-56, y:-56, hdg: 45 },
+      { id:'TEBRO', x:-80, y:  0, hdg: 90 },
+      { id:'KUMIK', x:-56, y: 56, hdg:135 },
+    ],
+  },
+  EDDM: {
+    name: 'München',
+    runways: [
+      { id:'26L', hdg:260, tx: 5, ty: 2,  hl:4.5 },
+      { id:'26R', hdg:260, tx: 5, ty:-2,  hl:4.5 },
+      { id:'08L', hdg: 80, tx:-5, ty:-2,  hl:4.5 },
+      { id:'08R', hdg: 80, tx:-5, ty: 2,  hl:4.5 },
+    ],
+    waypoints: [
+      { id:'GIVMI', x:  0, y: 80, hdg:180 },
+      { id:'OSMAX', x: 56, y: 56, hdg:225 },
+      { id:'OTT',   x: 80, y:  0, hdg:270 },
+      { id:'DOSEN', x: 56, y:-56, hdg:315 },
+      { id:'NAPSA', x:-56, y:-56, hdg: 45 },
+      { id:'MANU',  x:-80, y:  0, hdg: 90 },
+      { id:'DEPOL', x:-56, y: 56, hdg:135 },
+    ],
+  },
+  EDDP: {
+    name: 'Leipzig',
+    runways: [
+      { id:'26L', hdg:260, tx: 5, ty: 2,  hl:4.0 },
+      { id:'26R', hdg:260, tx: 5, ty:-2,  hl:4.0 },
+      { id:'08L', hdg: 80, tx:-5, ty:-2,  hl:4.0 },
+      { id:'08R', hdg: 80, tx:-5, ty: 2,  hl:4.0 },
+      { id:'33',  hdg:330, tx:-2, ty:-4,  hl:3.5 },
+      { id:'15',  hdg:150, tx: 2, ty: 4,  hl:3.5 },
+    ],
+    waypoints: [
+      { id:'ABGAS', x:  0, y: 80, hdg:180 },
+      { id:'GUDAN', x: 56, y: 56, hdg:225 },
+      { id:'LERGA', x: 80, y:  0, hdg:270 },
+      { id:'PADKO', x: 56, y:-56, hdg:315 },
+      { id:'DEMUT', x:-56, y:-56, hdg: 45 },
+      { id:'NATLO', x:-80, y:  0, hdg: 90 },
+      { id:'TESRA', x:-56, y: 56, hdg:135 },
+    ],
+  },
+  EDDH: {
+    name: 'Hamburg',
+    runways: [
+      { id:'23',  hdg:230, tx: 4,  ty: 3,  hl:3.5 },
+      { id:'05',  hdg: 50, tx:-4,  ty:-3,  hl:3.5 },
+      { id:'33',  hdg:330, tx:-3,  ty: 4,  hl:3.5 },
+      { id:'15',  hdg:150, tx: 3,  ty:-4,  hl:3.5 },
+    ],
+    waypoints: [
+      { id:'UNOKO', x:  0, y: 80, hdg:180 },
+      { id:'OKASI', x: 56, y: 56, hdg:225 },
+      { id:'MEVEL', x: 80, y:  0, hdg:270 },
+      { id:'NUDGO', x: 56, y:-56, hdg:315 },
+      { id:'EKSUT', x:-56, y:-56, hdg: 45 },
+      { id:'LURUP', x:-80, y:  0, hdg: 90 },
+      { id:'BALTU', x:-56, y: 56, hdg:135 },
+    ],
+  },
+  EDDV: {
+    name: 'Hannover',
+    runways: [
+      { id:'27L', hdg:270, tx: 5, ty: 2,  hl:4.0 },
+      { id:'27R', hdg:270, tx: 5, ty:-2,  hl:4.0 },
+      { id:'09L', hdg: 90, tx:-5, ty:-2,  hl:4.0 },
+      { id:'09R', hdg: 90, tx:-5, ty: 2,  hl:4.0 },
+      { id:'24',  hdg:240, tx: 3, ty: 3,  hl:3.0 },
+      { id:'06',  hdg: 60, tx:-3, ty:-3,  hl:3.0 },
+    ],
+    waypoints: [
+      { id:'OSREP', x:  0, y: 80, hdg:180 },
+      { id:'KOLUT', x: 56, y: 56, hdg:225 },
+      { id:'BAKNO', x: 80, y:  0, hdg:270 },
+      { id:'PETIX', x: 56, y:-56, hdg:315 },
+      { id:'IDOSA', x:-56, y:-56, hdg: 45 },
+      { id:'VAMUX', x:-80, y:  0, hdg: 90 },
+      { id:'SULUT', x:-56, y: 56, hdg:135 },
+    ],
+  },
+  KDEN: {
+    name: 'Denver',
+    runways: [
+      { id:'35L', hdg:350, tx:-2.5, ty:-5, hl:5.0 },
+      { id:'35R', hdg:350, tx: 2.5, ty:-5, hl:5.0 },
+      { id:'17L', hdg:170, tx: 2.5, ty: 5, hl:5.0 },
+      { id:'17R', hdg:170, tx:-2.5, ty: 5, hl:5.0 },
+      { id:'34L', hdg:340, tx:-4,   ty:-3, hl:4.0 },
+      { id:'16R', hdg:160, tx: 4,   ty: 3, hl:4.0 },
+      { id:'08',  hdg: 80, tx:-4,   ty: 0, hl:3.5 },
+      { id:'26',  hdg:260, tx: 4,   ty: 0, hl:3.5 },
+    ],
+    waypoints: [
+      { id:'BULDZ', x:  0, y: 80, hdg:180 },
+      { id:'KAILE', x: 56, y: 56, hdg:225 },
+      { id:'SAYKE', x: 80, y:  0, hdg:270 },
+      { id:'CASSO', x: 56, y:-56, hdg:315 },
+      { id:'HITIT', x:-56, y:-56, hdg: 45 },
+      { id:'ARCIE', x:-80, y:  0, hdg: 90 },
+      { id:'NOVEM', x:-56, y: 56, hdg:135 },
+    ],
+  },
+};
+
+function selectAirport(icao) {
+  const ap = AIRPORTS[icao];
+  if (!ap) return;
+  RUNWAYS  = ap.runways;
+  RWY      = Object.fromEntries(RUNWAYS.map(r => [r.id, r]));
+  WAYPOINTS = ap.waypoints;
+  WP       = Object.fromEntries(WAYPOINTS.map(w => [w.id, w]));
+  document.getElementById('airport-name').textContent = ap.name.toUpperCase();
+  document.getElementById('rwy-list').textContent =
+    'Runways: ' + RUNWAYS.map(r => r.id).join(' · ');
+  initWind();
+  document.getElementById('airport-overlay').style.display = 'none';
+  document.getElementById('help-overlay').style.display = 'flex';
+}
 
 // ============================================================
 //  WIND  (Feature 2)
@@ -604,8 +751,7 @@ function spawn() {
     const depRwyIds = WIND.preferredRwys.length ? WIND.preferredRwys : RUNWAYS.map(r=>r.id);
     const rId = depRwyIds[Math.floor(Math.random()*depRwyIds.length)];
     const r = RWY[rId];
-    const rwIdx = RUNWAYS.findIndex(rr => rr.id === rId);
-    const hl = rwIdx < 4 ? 4.0 : (rwIdx < 6 ? 3.5 : 3.0);
+    const hl = r.hl || 3.5;
     // Start at the far (upwind) end of the runway
     const ac = new AC({
       cs:   nextCS(),
@@ -831,16 +977,12 @@ function drawRadar() {
     ctx.fillText(lbl, CX+Math.sin(rad)*(r-22)-4, CY-Math.cos(rad)*(r-22)+4);
   });
 
-  // ILS feathers
-  ctx.setLineDash([5,5]); ctx.lineWidth=1;
-  [
-    [RWY['27L'].tx, RWY['27L'].ty,  55, RWY['27L'].ty, '#0d2d18'],
-    [RWY['27R'].tx, RWY['27R'].ty,  55, RWY['27R'].ty, '#0d2d18'],
-    [RWY['18'].tx,  RWY['18'].ty,   RWY['18'].tx,  55, '#0d2d0d'],
-    [RWY['14'].tx,  RWY['14'].ty,
-     RWY['14'].tx + sin(320)*50, RWY['14'].ty + cos(320)*50, '#1a2d0d'],
-  ].forEach(([x1,y1,x2,y2,col]) => {
-    ctx.strokeStyle=col; drawLine(x1,y1,x2,y2);
+  // ILS feathers — computed for preferred runways
+  ctx.setLineDash([5,5]); ctx.lineWidth=1; ctx.strokeStyle='#0d2d18';
+  WIND.preferredRwys.forEach(id => {
+    const r = RWY[id]; if (!r) return;
+    const out = normHdg(r.hdg + 180);
+    drawLine(r.tx, r.ty, r.tx + sin(out)*70, r.ty + cos(out)*70);
   });
   ctx.setLineDash([]);
 
@@ -850,7 +992,7 @@ function drawRadar() {
     const isPref = WIND.preferredRwys.includes(r.id);
     ctx.strokeStyle = isPref ? '#44ff44' : (isMain ? '#1a6a1a' : '#156015');
     ctx.lineWidth   = isMain ? 5 : 3;
-    const hl = i < 4 ? 4.0 : (i < 6 ? 3.5 : 3.0);
+    const hl = r.hl || 3.5;
     drawLine(r.tx - sin(r.hdg)*hl, r.ty - cos(r.hdg)*hl,
              r.tx + sin(r.hdg)*hl, r.ty + cos(r.hdg)*hl);
   });
@@ -858,10 +1000,10 @@ function drawRadar() {
   // Runway labels — placed beyond the approach end, off the centerline
   ctx.font = 'bold 13px Courier New';
   ctx.textAlign = 'center';
-  RUNWAYS.forEach((r, i) => {
+  RUNWAYS.forEach(r => {
     const isPref = WIND.preferredRwys.includes(r.id);
     ctx.fillStyle = isPref ? '#66ff66' : '#3a9a3a';
-    const hl = i < 4 ? 4.0 : (i < 6 ? 3.5 : 3.0);
+    const hl = r.hl || 3.5;
     const outHdg = normHdg(r.hdg + 180);
     // 1.8nm beyond runway end, 1nm to the right of centerline
     const lx = r.tx + sin(outHdg)*(hl+1.8) + sin(normHdg(r.hdg+90))*1.0;
