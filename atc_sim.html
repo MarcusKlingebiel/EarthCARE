@@ -510,13 +510,14 @@ class AC {
     this.trail  = [];
     this.trailT = 0;
     this.conflict   = false;
-    this._conflWarn = false;
     this.removed    = false;
 
     // Feature 1: Holding
     this.holding      = false;
     this.holdX        = 0;
     this.holdY        = 0;
+
+    this.goAroundAt   = null;  // nm from threshold to trigger go-around (null = none)
 
     // Feature 3: Emergency
     this.emergency    = false;
@@ -663,6 +664,10 @@ class AC {
     if (this.state === 'approach') {
       if (Math.abs(cross) < 0.25 && Math.abs(hdgDiff(this.hdg, r.hdg)) < 20 && along > 0.5) {
         this.state = 'final';
+        // ~12% chance of go-around, triggered 3–6nm before threshold
+        if (!this.emergency && Math.random() < 0.12) {
+          this.goAroundAt = 3 + Math.random() * 3;
+        }
       } else {
         const lookAhead = Math.max(along + 8, 8);
         const tgx = r.tx + lcx * lookAhead;
@@ -674,6 +679,17 @@ class AC {
     }
 
     if (this.state === 'final') {
+      // Go-around trigger
+      if (this.goAroundAt !== null && dToThr < this.goAroundAt) {
+        this.state = 'enroute';
+        this.appRwy = null;
+        this.goAroundAt = null;
+        this.tHdg = r.hdg;   // continue on runway heading
+        this.tAlt = 3000;
+        this.tSpd = 200;
+        msg(`${this.cs}: GO AROUND — re-sequence for ILS`, 'msg-warn');
+        return;
+      }
       this.tHdg = r.hdg;
       const gsAlt = Math.max(0, dToThr * 318);
       // Only ratchet down — don't pull aircraft back up if it dips below glideslope
@@ -715,6 +731,7 @@ const G = {
   // Feature 3: Emergency timer
   nextEmergency: 90 + Math.random() * 60,  // real seconds
   crashMarkers: [],  // [{x,y,ttl}] — brief red X after crash
+  warnedPairs:  new Set(),  // uid/uid keys of pairs already penalised this conflict
 };
 
 function freeCS(cs) { G.usedCS.delete(cs); }
@@ -792,6 +809,7 @@ function triggerEmergency() {
 function checkConflicts() {
   const live = G.acs.filter(a=>!a.removed && a.state!=='landing');
   live.forEach(a => a.conflict = false);
+  const active = new Set();
   for (let i=0; i<live.length; i++) {
     for (let j=i+1; j<live.length; j++) {
       const a=live[i], b=live[j];
@@ -800,15 +818,20 @@ function checkConflicts() {
       const conflict = hd < CFG.sepH && vd < CFG.sepV;
       a.conflict = a.conflict || conflict;
       b.conflict = b.conflict || conflict;
-      if (conflict && !a._conflWarn) {
-        msg(`⚠ CONFLICT ${a.cs}/${b.cs} ${hd.toFixed(1)}nm ${Math.round(vd)}ft`, 'msg-err');
-        a._conflWarn = b._conflWarn = true;
-        G.score -= 200;
-        renderScore();
+      if (conflict) {
+        const key = a.uid < b.uid ? `${a.uid}:${b.uid}` : `${b.uid}:${a.uid}`;
+        active.add(key);
+        if (!G.warnedPairs.has(key)) {
+          G.warnedPairs.add(key);
+          msg(`⚠ CONFLICT ${a.cs}/${b.cs} ${hd.toFixed(1)}nm ${Math.round(vd)}ft`, 'msg-err');
+          G.score -= 200;
+          renderScore();
+        }
       }
-      if (!conflict) { a._conflWarn = false; b._conflWarn = false; }
     }
   }
+  // Clear pairs that are no longer conflicting
+  for (const k of G.warnedPairs) { if (!active.has(k)) G.warnedPairs.delete(k); }
 }
 
 // ============================================================
