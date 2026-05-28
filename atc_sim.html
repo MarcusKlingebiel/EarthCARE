@@ -462,9 +462,11 @@ class AC {
     this.x += sin(this.hdg) * nmps * sdt;
     this.y += cos(this.hdg) * nmps * sdt;
 
-    // Feature 2: Wind drift
-    this.x += WIND.dx * sdt;
-    this.y += WIND.dy * sdt;
+    // Feature 2: Wind drift (ILS holds centerline — no drift during approach/final)
+    if (this.state !== 'approach' && this.state !== 'final') {
+      this.x += WIND.dx * sdt;
+      this.y += WIND.dy * sdt;
+    }
 
     // Landing check
     if (this.state === 'final' && this.appRwy) {
@@ -763,15 +765,16 @@ function drawRadar() {
   ctx.fillRect(0, 0, S, SH);
 
   // Range rings
-  ctx.lineWidth = 1;
   for (let r=10; r<=CFG.range; r+=10) {
-    ctx.strokeStyle = r===20 ? '#0d1f0d' : '#091509';
+    const isBoundary = r === CFG.range;
+    ctx.lineWidth   = isBoundary ? 2 : 1;
+    ctx.strokeStyle = isBoundary ? '#2a6a2a' : (r===20 ? '#0d1f0d' : '#091509');
     ctx.beginPath();
     ctx.arc(CX, CY, r*PX, 0, Math.PI*2);
     ctx.stroke();
-    ctx.fillStyle = '#0f2f0f';
-    ctx.font = '9px Courier New';
-    ctx.fillText(`${r}nm`, CX+r*PX+3, CY-3);
+    ctx.fillStyle = isBoundary ? '#3a9a3a' : '#0f2f0f';
+    ctx.font = isBoundary ? 'bold 9px Courier New' : '9px Courier New';
+    ctx.fillText(isBoundary ? `${r}nm BOUNDARY` : `${r}nm`, CX+r*PX+3, CY-3);
   }
 
   // Cardinal ticks & labels
@@ -1251,6 +1254,13 @@ requestAnimationFrame(() => {
 window.addEventListener('resize', () => {
   initCanvas(); updateScale();
 });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+  CFG.range = Math.max(20, Math.min(150, CFG.range * factor));
+  updateScale();
+}, { passive: false });
 </script>
 </body>
 </html>
