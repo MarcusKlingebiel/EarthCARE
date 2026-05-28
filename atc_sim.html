@@ -19,9 +19,17 @@ body {
   font-size:12px; background:#020a02; flex-shrink:0;
 }
 #main { display:flex; flex:1; overflow:hidden; }
-canvas { display:block; cursor:crosshair; flex-shrink:0; }
+canvas { display:block; cursor:crosshair; flex-shrink:0; transition:box-shadow 0.1s; }
+canvas.level-up {
+  animation: levelFlash 1.5s ease-out forwards;
+}
+@keyframes levelFlash {
+  0%   { box-shadow: 0 0 0 4px #44ff44, 0 0 20px #44ff44; }
+  60%  { box-shadow: 0 0 0 4px #44ff44, 0 0 20px #44ff44; }
+  100% { box-shadow: none; }
+}
 #sidebar {
-  width:160px; border-left:1px solid #0a2a0a;
+  width:170px; border-left:1px solid #0a2a0a;
   display:flex; flex-direction:column; overflow:hidden;
   background:#010801;
 }
@@ -41,6 +49,7 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
 .strip.arr { border-left:3px solid #33aaff; }
 .strip.dep { border-left:3px solid #ffaa33; }
 .strip.warn { border-left:3px solid #ff3333; animation:blink .5s infinite; }
+.strip.emergency { border-left:3px solid #ff0000 !important; background:#1a0000 !important; animation:blink .35s infinite; }
 #info-panel {
   border-top:1px solid #0a2a0a; padding:4px 5px; font-size:10px;
   line-height:1.55; min-height:90px;
@@ -52,6 +61,7 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
 .msg-ok   { color:#44ff44; }
 .msg-warn { color:#ffaa00; }
 .msg-err  { color:#ff4444; }
+.msg-emg  { color:#ff0000; font-weight:bold; }
 #cmd-bar {
   border-top:1px solid #0a2a0a;
   padding:5px 6px; background:#010901;
@@ -69,15 +79,15 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
   justify-content:center; z-index:10;
 }
 #help-box {
-  border:1px solid #1a6a1a; padding:24px 32px; max-width:460px;
-  font-size:13px; line-height:2;
+  border:1px solid #1a6a1a; padding:20px 28px; max-width:500px;
+  font-size:12px; line-height:1.85;
 }
-#help-box h2 { color:#44ff44; margin-bottom:12px; font-size:16px; }
+#help-box h2 { color:#44ff44; margin-bottom:10px; font-size:16px; }
 #help-box table { width:100%; border-collapse:collapse; }
-#help-box td { padding:2px 8px; color:#22cc22; }
-#help-box td:first-child { color:#88ff88; width:130px; }
+#help-box td { padding:1px 6px; color:#22cc22; }
+#help-box td:first-child { color:#88ff88; width:140px; }
 #start-btn {
-  margin-top:18px; width:100%; padding:8px;
+  margin-top:14px; width:100%; padding:8px;
   background:#0a2a0a; border:1px solid #33ff33; color:#33ff33;
   font-family:'Courier New',monospace; font-size:14px; cursor:pointer;
 }
@@ -88,7 +98,7 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
   font-size:11px; padding:2px 7px;
 }
 #speed-btn:hover { border-color:#33ff33; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
 </style>
 </head>
 <body>
@@ -96,6 +106,8 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
 <div id="header">
   <span>⬡ ATC RADAR · EGLL APPROACH CONTROL · 80NM</span>
   <span id="score-display">SCORE: 0 &nbsp;|&nbsp; LANDED: 0 &nbsp;|&nbsp; DEPARTED: 0</span>
+  <span id="level-display" style="color:#44ff44;font-weight:bold">LEVEL 1</span>
+  <span id="wind-display" style="color:#aaffaa">WND ---/--</span>
   <span>
     <button id="speed-btn" onclick="cycleSpeed()">SIM ×<span id="speed-val">1</span></button>
     &nbsp; [P] Pause &nbsp; [?] Help
@@ -116,7 +128,7 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
     <div id="cmd-bar">
       <div id="cmd-label">CMD › <span id="sel-cs" style="color:#aaffaa">none</span></div>
       <input id="cmd-input" type="text"
-        placeholder="h 270 · a 030 · s 200 · app 27L" autocomplete="off" spellcheck="false">
+        placeholder="h 270 · app 27L · hold · d NEE" autocomplete="off" spellcheck="false">
     </div>
   </div>
 </div>
@@ -126,27 +138,30 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
   <div id="help-box">
     <h2>ATC RADAR SIMULATOR</h2>
     <table>
-      <tr><td>h [deg]</td><td>Fly heading &nbsp;→ h 270</td></tr>
-      <tr><td>a [FL]</td><td>Altitude &nbsp;→ a 080 (= FL080 = 8000ft)</td></tr>
-      <tr><td>s [kts]</td><td>Speed &nbsp;→ s 220</td></tr>
-      <tr><td>l / r [deg]</td><td>Turn left/right 30° &nbsp;→ l 45</td></tr>
-      <tr><td>app [rwy]</td><td>Clear for ILS &nbsp;→ app 27L</td></tr>
+      <tr><td>h [deg]</td><td>Fly heading → h 270</td></tr>
+      <tr><td>a [FL]</td><td>Altitude → a 080 (= FL080)</td></tr>
+      <tr><td>s [kts]</td><td>Speed → s 220</td></tr>
+      <tr><td>l / r [deg]</td><td>Turn left/right → l 45</td></tr>
+      <tr><td>app [rwy]</td><td>Clear for ILS → app 27L</td></tr>
+      <tr><td>hold</td><td>Enter right-hand holding pattern</td></tr>
+      <tr><td>d [WPT]</td><td>Direct to waypoint → d NEE</td></tr>
       <tr><td>P / X</td><td>Pause / cycle sim speed</td></tr>
     </table>
 
-    <p style="margin-top:14px;color:#44ff88;font-size:12px;font-weight:bold">HOW TO LAND AN AIRCRAFT</p>
-    <p style="color:#22cc22;font-size:11px;line-height:1.7">
-      1. <b>Click</b> the blue arrival aircraft (or its strip on the right)<br>
+    <p style="margin-top:10px;color:#44ff88;font-size:12px;font-weight:bold">HOW TO LAND AN AIRCRAFT</p>
+    <p style="color:#22cc22;font-size:11px;line-height:1.65">
+      1. <b>Click</b> the arrival aircraft (or its strip on the right)<br>
       2. Type <b>h 270</b> to point it toward the runway from the east<br>
       3. Descend: type <b>a 030</b> (= 3000 ft) while still 10–20nm out<br>
       4. Type <b>app 27L</b> — aircraft intercepts the dashed ILS line<br>
          and auto-lands. ↘ = intercepting, ▼ = on final.<br>
-      <span style="color:#aaffaa">Runways: 27L · 27R · 09L · 09R · 18 · 36 · 14 · 32<br>
-      Also works: app 27 (= 27L), app 9 (= 09R)</span>
+      <span style="color:#aaffaa">Runways: 27L · 27R · 09L · 09R · 18 · 36 · 14 · 32</span>
     </p>
-    <p style="margin-top:8px;color:#1a8a1a;font-size:11px">
-      Arrivals (blue) must land. Departures (orange) route to edge waypoints.<br>
-      Keep 3nm / 1000ft separation between all aircraft.
+    <p style="margin-top:6px;color:#1a8a1a;font-size:11px">
+      Arrivals (blue strip) must land. Departures (orange strip) route to edge waypoints.<br>
+      Keep 3nm / 1000ft separation. Blip color = altitude band.<br>
+      ⚡ MAYDAY aircraft need landing within 120 sim-sec — priority landing!<br>
+      Every 5 completions advances level — faster spawns, more traffic.
     </p>
     <button id="start-btn" onclick="startGame()">▶ START GAME</button>
   </div>
@@ -159,23 +174,22 @@ canvas { display:block; cursor:crosshair; flex-shrink:0; }
 //  CONFIG
 // ============================================================
 const CFG = {
-  size: 0,          // set dynamically
-  range: 80,        // nm radius
-  simRate: 10,      // sim-sec per real-sec (base) — slow & comfortable
+  size: 0,
+  range: 80,
+  simRate: 10,
   simRates: [1, 2, 3],
   simRateIdx: 0,
-  spawnMinR: 25,    // real seconds
-  spawnMaxR: 45,
-  sepH: 3,          // nm
-  sepV: 1000,       // ft
+  spawnMinR: 35,
+  spawnMaxR: 50,
+  sepH: 3,
+  sepV: 1000,
   trailLen: 7,
-  trailEvery: 4,    // sim-sec between trail points
-  maxAC: 12,
+  trailEvery: 4,
+  maxAC: 6,
 };
 
-// Canvas sizing: fit the available height
 function initCanvas() {
-  const sidebar = 160;
+  const sidebar = 170;
   const headerH = document.getElementById('header').offsetHeight;
   const avail = Math.min(window.innerHeight - headerH, window.innerWidth - sidebar);
   CFG.size = Math.floor(avail);
@@ -207,7 +221,6 @@ function hdgDiff(a, b) {
 }
 
 function dst(x1,y1,x2,y2) { return Math.hypot(x2-x1, y2-y1); }
-
 function nm2px(x, y) { return { px: CX + x*PX, py: CY - y*PX }; }
 
 function bearing(fx, fy, tx, ty) {
@@ -218,15 +231,12 @@ function bearing(fx, fy, tx, ty) {
 //  AIRPORT
 // ============================================================
 const RUNWAYS = [
-  // Parallel E-W pair (main)
   { id:'27L', hdg:270, tx: 4, ty:  1.8 },
   { id:'27R', hdg:270, tx: 4, ty: -1.8 },
   { id:'09L', hdg: 90, tx:-4, ty: -1.8 },
   { id:'09R', hdg: 90, tx:-4, ty:  1.8 },
-  // N-S runway
   { id:'18',  hdg:180, tx: 1.5, ty:  4  },
   { id:'36',  hdg:360, tx:-1.5, ty: -4  },
-  // Diagonal NW-SE
   { id:'14',  hdg:140, tx:  2.5, ty:  2.5 },
   { id:'32',  hdg:320, tx: -2.5, ty: -2.5 },
 ];
@@ -245,6 +255,77 @@ const WAYPOINTS = [
 const WP = Object.fromEntries(WAYPOINTS.map(w => [w.id, w]));
 
 // ============================================================
+//  WIND  (Feature 2)
+// ============================================================
+const WIND = {
+  from: 0,   // direction wind comes FROM (degrees)
+  spd:  0,   // knots
+  preferredRwys: [],
+};
+
+function initWind() {
+  WIND.from = Math.floor(Math.random() * 36) * 10;
+  WIND.spd  = 5 + Math.floor(Math.random() * 20);
+
+  // Preferred runways: those whose landing heading is closest to wind-from direction
+  // (land into wind → runway heading ≈ wind-from)
+  const scores = RUNWAYS.map(r => ({
+    id: r.id,
+    diff: Math.abs(hdgDiff(r.hdg, WIND.from)),
+  }));
+  scores.sort((a,b) => a.diff - b.diff);
+  // Mark the best 2 (may be parallel pair) as preferred
+  const threshold = scores[0].diff + 15;
+  WIND.preferredRwys = scores.filter(s => s.diff <= threshold).map(s => s.id);
+
+  // Wind drift components (nm/sim-sec): wind pushes aircraft in wind-TO direction
+  const windTo = normHdg(WIND.from + 180);
+  WIND.dx = sin(windTo) * WIND.spd / 3600;  // nm per sim-sec eastward
+  WIND.dy = cos(windTo) * WIND.spd / 3600;  // nm per sim-sec northward
+
+  document.getElementById('wind-display').textContent =
+    `WND ${WIND.from.toString().padStart(3,'0')}/${WIND.spd.toString().padStart(2,'0')}`;
+}
+
+// ============================================================
+//  LEVEL SYSTEM  (Feature 7)
+// ============================================================
+const LEVEL = {
+  n: 1,
+  completions: 0,
+};
+
+function checkLevelUp() {
+  const threshold = LEVEL.n * 5;
+  if (LEVEL.completions >= threshold) {
+    LEVEL.n++;
+    // Update spawn config
+    CFG.spawnMinR = Math.max(8, 35 - LEVEL.n * 3);
+    CFG.spawnMaxR = Math.max(12, 50 - LEVEL.n * 5);
+    CFG.maxAC     = Math.min(12, 6 + LEVEL.n);
+    document.getElementById('level-display').textContent = `LEVEL ${LEVEL.n}`;
+    msg(`▲ LEVEL UP! Now Level ${LEVEL.n} — max ${CFG.maxAC} aircraft`, 'msg-ok');
+    // Flash canvas border
+    const c = document.getElementById('radar');
+    c.classList.remove('level-up');
+    void c.offsetWidth; // reflow to restart animation
+    c.classList.add('level-up');
+    setTimeout(() => c.classList.remove('level-up'), 1500);
+  }
+}
+
+// ============================================================
+//  ALTITUDE COLOR (Feature 5)
+// ============================================================
+function altColor(alt) {
+  if (alt >= 10000) return '#33ff33';
+  if (alt >=  6000) return '#aaff33';
+  if (alt >=  3000) return '#ffdd33';
+  if (alt >=  1000) return '#ff8833';
+  return '#ff3333';
+}
+
+// ============================================================
 //  AIRCRAFT
 // ============================================================
 let uidSeq = 0;
@@ -256,29 +337,46 @@ const CALLSIGNS = [
 
 class AC {
   constructor(o) {
-    this.uid   = ++uidSeq;
-    this.cs    = o.cs;
-    this.acType= TYPES[Math.floor(Math.random()*TYPES.length)];
-    this.kind  = o.kind;       // 'arr' | 'dep'
-    this.x     = o.x;
-    this.y     = o.y;
-    this.hdg   = o.hdg;
-    this.tHdg  = o.hdg;
-    this.alt   = o.alt;
-    this.tAlt  = o.alt;
-    this.spd   = o.spd;
-    this.tSpd  = o.spd;
-    this.dest  = o.dest  || null;  // waypoint id for deps
-    this.state = 'enroute';        // enroute | approach | final | landing
-    this.appRwy= null;
-    this.trail = [];
-    this.trailT= 0;
-    this.conflict  = false;
-    this._conflWarn= false;
-    this.removed   = false;
+    this.uid    = ++uidSeq;
+    this.cs     = o.cs;
+    this.acType = TYPES[Math.floor(Math.random()*TYPES.length)];
+    this.kind   = o.kind;
+    this.x      = o.x;
+    this.y      = o.y;
+    this.hdg    = o.hdg;
+    this.tHdg   = o.hdg;
+    this.alt    = o.alt;
+    this.tAlt   = o.alt;
+    this.spd    = o.spd;
+    this.tSpd   = o.spd;
+    this.dest   = o.dest  || null;
+    this.state  = 'enroute';
+    this.appRwy = null;
+    this.trail  = [];
+    this.trailT = 0;
+    this.conflict   = false;
+    this._conflWarn = false;
+    this.removed    = false;
+
+    // Feature 1: Holding
+    this.holding      = false;
+    this.holdX        = 0;
+    this.holdY        = 0;
+
+    // Feature 3: Emergency
+    this.emergency    = false;
+    this.emergencyTimer = 0;   // sim-seconds remaining before penalty
+    this.emergencyWarned = false;
+
+    // Feature 6: Direct-to
+    this.directTo     = null;  // waypoint id
   }
 
   get fl() { return Math.round(this.alt / 100); }
+
+  cancelHold() {
+    this.holding = false;
+  }
 
   update(dt) {
     const sdt = dt * CFG.simRate * CFG.simRates[CFG.simRateIdx];
@@ -291,17 +389,48 @@ class AC {
       this.trailT = 0;
     }
 
+    // Feature 3: Emergency countdown
+    if (this.emergency && this.state !== 'final' && this.state !== 'landing') {
+      this.emergencyTimer -= sdt;
+      if (this.emergencyTimer <= 0 && !this.emergencyWarned) {
+        this.emergencyWarned = true;
+        G.score -= 300;
+        msg(`⚡ ${this.cs} EMERGENCY EXPIRED -300pts`, 'msg-emg');
+        renderScore();
+        this.emergency = false; // stop counting further
+      }
+    }
+
+    // Feature 6: Direct-to heading update
+    if (this.directTo && !this.holding && this.state === 'enroute') {
+      const wp = WP[this.directTo];
+      if (wp) {
+        this.tHdg = bearing(this.x, this.y, wp.x, wp.y);
+      }
+    }
+
+    // Feature 1: Holding — turn right continuously
+    if (this.holding) {
+      this.tHdg = normHdg(this.hdg + 3 * sdt); // continuous right turn target
+    }
+
     // Approach guidance
     if (this.state === 'approach' || this.state === 'final') {
       this._guideApproach(sdt);
     }
 
     // Turn (3 deg/sim-sec)
-    const diff = hdgDiff(this.hdg, this.tHdg);
-    if (Math.abs(diff) > 0.5) {
-      this.hdg = normHdg(this.hdg + Math.sign(diff) * Math.min(3*sdt, Math.abs(diff)));
+    if (this.holding) {
+      // In hold, just rotate continuously right
+      this.hdg = normHdg(this.hdg + 3 * sdt);
+      this.tHdg = this.hdg;
     } else {
-      this.hdg = this.tHdg;
+      const diff = hdgDiff(this.hdg, this.tHdg);
+      if (Math.abs(diff) > 0.5) {
+        this.hdg = normHdg(this.hdg + Math.sign(diff) * Math.min(3*sdt, Math.abs(diff)));
+      } else {
+        this.hdg = this.tHdg;
+      }
     }
 
     // Altitude (2000 ft/min)
@@ -325,11 +454,29 @@ class AC {
     this.x += sin(this.hdg) * nmps * sdt;
     this.y += cos(this.hdg) * nmps * sdt;
 
+    // Feature 2: Wind drift
+    this.x += WIND.dx * sdt;
+    this.y += WIND.dy * sdt;
+
     // Landing check
     if (this.state === 'final' && this.appRwy) {
       const r = RWY[this.appRwy];
       if (dst(this.x,this.y, r.tx,r.ty) < 0.35 && this.alt < 500) {
         this.state = 'landing';
+      }
+    }
+
+    // Feature 6: waypoint reach check for arrivals passing through
+    if (this.directTo && this.state === 'enroute') {
+      const wp = WP[this.directTo];
+      if (wp && dst(this.x, this.y, wp.x, wp.y) < 3) {
+        if (this.kind === 'dep') {
+          // Let the main loop handle departure completion
+        } else {
+          // Arrival passed through waypoint — just clear the direct-to
+          msg(`${this.cs}: PASSING ${this.directTo}`, '');
+          this.directTo = null;
+        }
       }
     }
   }
@@ -338,31 +485,25 @@ class AC {
     const r = RWY[this.appRwy];
     if (!r) return;
 
-    // Localizer axis: outward from threshold = opposite of landing heading
     const outHdg = normHdg(r.hdg + 180);
-    const lcx = sin(outHdg);  // east component of localizer direction
-    const lcy = cos(outHdg);  // north component
+    const lcx = sin(outHdg);
+    const lcy = cos(outHdg);
 
     const dx = this.x - r.tx;
     const dy = this.y - r.ty;
     const dToThr = Math.hypot(dx, dy);
 
-    // Signed crosstrack (+ = right of centerline when looking outward)
     const cross = lcx*dy - lcy*dx;
-    // Along-track distance from threshold (positive = on localizer side)
     const along = lcx*dx + lcy*dy;
 
     if (this.state === 'approach') {
-      // Capture when aligned and near centerline
       if (Math.abs(cross) < 0.25 && Math.abs(hdgDiff(this.hdg, r.hdg)) < 20 && along > 0.5) {
         this.state = 'final';
       } else {
-        // Aim at a point on the centerline ahead
         const lookAhead = Math.max(along + 8, 8);
         const tgx = r.tx + lcx * lookAhead;
         const tgy = r.ty + lcy * lookAhead;
         const raw = bearing(this.x, this.y, tgx, tgy);
-        // Clamp intercept to ±40° of runway heading
         const intercept = hdgDiff(r.hdg, raw);
         this.tHdg = normHdg(r.hdg + Math.max(-40, Math.min(40, intercept)));
       }
@@ -370,7 +511,6 @@ class AC {
 
     if (this.state === 'final') {
       this.tHdg = r.hdg;
-      // 3° glideslope: alt_ft = dist_nm * tan(3°) * 6076
       const gsAlt = Math.max(0, dToThr * 318);
       this.tAlt = gsAlt;
       if (dToThr < 10) this.tSpd = Math.min(this.tSpd, 200);
@@ -386,6 +526,8 @@ class AC {
     if (d > 65) return false;
     this.appRwy = rwyId;
     this.state  = 'approach';
+    this.cancelHold();
+    this.directTo = null;
     return true;
   }
 }
@@ -405,6 +547,8 @@ const G = {
   usedCS:    new Set(),
   paused:    false,
   started:   false,
+  // Feature 3: Emergency timer
+  nextEmergency: 90 + Math.random() * 60,  // real seconds
 };
 
 function freeCS(cs) { G.usedCS.delete(cs); }
@@ -454,6 +598,20 @@ function spawn() {
 }
 
 // ============================================================
+//  FEATURE 3: EMERGENCY EVENTS
+// ============================================================
+function triggerEmergency() {
+  const arrivals = G.acs.filter(a => !a.removed && a.kind === 'arr' && !a.emergency &&
+                                     a.state !== 'landing' && a.state !== 'final');
+  if (arrivals.length === 0) return;
+  const ac = arrivals[Math.floor(Math.random() * arrivals.length)];
+  ac.emergency = true;
+  ac.emergencyTimer = 120; // sim-seconds
+  ac.tSpd = Math.min(ac.tSpd, 220); // cap speed but can go up to 220
+  msg(`⚡ MAYDAY: ${ac.cs} FUEL EMERGENCY — land within 120 sim-sec!`, 'msg-emg');
+}
+
+// ============================================================
 //  CONFLICT DETECTION
 // ============================================================
 function checkConflicts() {
@@ -493,6 +651,8 @@ function parseCmd(raw) {
       if (isNaN(h)||h<0||h>360) { msg('Invalid heading', 'msg-warn'); return; }
       if (h===0) h=360;
       ac.tHdg = h;
+      ac.cancelHold();
+      ac.directTo = null;
       if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
       msg(`${ac.cs}: HDG ${h.toString().padStart(3,'0')}°`);
       break;
@@ -508,12 +668,13 @@ function parseCmd(raw) {
     case 's': case 'spd': case 'speed': {
       const s = parseInt(arg);
       if (isNaN(s)||s<0||s>600) { msg('Invalid speed', 'msg-warn'); return; }
-      ac.tSpd = s;
-      msg(`${ac.cs}: SPEED ${s}kts`);
+      // Emergency aircraft: enforce 220 max if still in emergency
+      const maxS = (ac.emergency && ac.emergencyTimer > 0) ? 220 : 600;
+      ac.tSpd = Math.min(s, maxS);
+      msg(`${ac.cs}: SPEED ${ac.tSpd}kts`);
       break;
     }
     case 'app': case 'ils': case 'approach': {
-      // Aliases: '27'→'27L', '09'/'9'→'09R', bare number → preferred runway
       const ALIASES = {'27':'27L','9':'09R','09':'09R','36':'36','18':'18','14':'14','32':'32'};
       let rId = (arg || '27L').toUpperCase();
       if (ALIASES[rId]) rId = ALIASES[rId];
@@ -530,6 +691,8 @@ function parseCmd(raw) {
     case 'l': case 'tl': case 'left': {
       const deg = parseInt(arg)||30;
       ac.tHdg = normHdg(ac.hdg - deg);
+      ac.cancelHold();
+      ac.directTo = null;
       if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
       msg(`${ac.cs}: TURN LEFT ${deg}°`);
       break;
@@ -537,12 +700,39 @@ function parseCmd(raw) {
     case 'r': case 'tr': case 'right': {
       const deg = parseInt(arg)||30;
       ac.tHdg = normHdg(ac.hdg + deg);
+      ac.cancelHold();
+      ac.directTo = null;
       if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
       msg(`${ac.cs}: TURN RIGHT ${deg}°`);
       break;
     }
+    // Feature 1: Hold
+    case 'hold': {
+      if (ac.emergency) {
+        msg(`${ac.cs}: CANNOT HOLD — EMERGENCY!`, 'msg-err'); return;
+      }
+      ac.holding = true;
+      ac.holdX = ac.x;
+      ac.holdY = ac.y;
+      if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
+      ac.directTo = null;
+      msg(`${ac.cs}: HOLD right-hand pattern at current pos`, 'msg-ok');
+      break;
+    }
+    // Feature 6: Direct-to
+    case 'd': case 'direct': case 'dct': {
+      const wpId = (arg || '').toUpperCase();
+      if (!WP[wpId]) {
+        msg(`Unknown waypoint "${wpId}". Try: ${WAYPOINTS.map(w=>w.id).join(' ')}`, 'msg-warn'); return;
+      }
+      ac.directTo = wpId;
+      ac.cancelHold();
+      if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
+      msg(`${ac.cs}: DIRECT ${wpId}`, 'msg-ok');
+      break;
+    }
     default:
-      msg(`Unknown: ${cmd} — try h/a/s/app/l/r`, 'msg-warn');
+      msg(`Unknown: ${cmd} — try h/a/s/app/l/r/hold/d`, 'msg-warn');
   }
   renderAcInfo();
 }
@@ -583,14 +773,12 @@ function drawRadar() {
     ctx.fillText(lbl, CX+Math.sin(rad)*(r-22)-4, CY-Math.cos(rad)*(r-22)+4);
   });
 
-  // ILS feathers (dashed extended centreline for each landing direction)
+  // ILS feathers
   ctx.setLineDash([5,5]); ctx.lineWidth=1;
   [
-    // [from_x, from_y, to_x, to_y, colour]
     [RWY['27L'].tx, RWY['27L'].ty,  55, RWY['27L'].ty, '#0d2d18'],
     [RWY['27R'].tx, RWY['27R'].ty,  55, RWY['27R'].ty, '#0d2d18'],
     [RWY['18'].tx,  RWY['18'].ty,   RWY['18'].tx,  55, '#0d2d0d'],
-    // RWY 14: localizer extends NW (opposite of hdg 140 = 320)
     [RWY['14'].tx,  RWY['14'].ty,
      RWY['14'].tx + sin(320)*50, RWY['14'].ty + cos(320)*50, '#1a2d0d'],
   ].forEach(([x1,y1,x2,y2,col]) => {
@@ -598,27 +786,29 @@ function drawRadar() {
   });
   ctx.setLineDash([]);
 
-  // Runways — draw all, main E-W pair thicker
+  // Runways — Feature 2: preferred runways brighter
   RUNWAYS.forEach((r, i) => {
     const isMain = i < 4;
-    ctx.strokeStyle = isMain ? '#1a6a1a' : '#156015';
+    const isPref = WIND.preferredRwys.includes(r.id);
+    ctx.strokeStyle = isPref ? '#44ff44' : (isMain ? '#1a6a1a' : '#156015');
     ctx.lineWidth   = isMain ? 5 : 3;
     const hl = 2.6;
     drawLine(r.tx - sin(r.hdg)*hl, r.ty - cos(r.hdg)*hl,
              r.tx + sin(r.hdg)*hl, r.ty + cos(r.hdg)*hl);
   });
 
-  // Runway labels (at the landing threshold end)
-  ctx.fillStyle='#3a9a3a'; ctx.font='bold 9px Courier New';
+  // Runway labels
+  ctx.font = 'bold 9px Courier New';
   RUNWAYS.forEach(r => {
-    // Label at threshold side (opposite direction of landing = outward along localizer)
+    const isPref = WIND.preferredRwys.includes(r.id);
+    ctx.fillStyle = isPref ? '#66ff66' : '#3a9a3a';
     const lx = r.tx + sin(normHdg(r.hdg+180)) * 3.5;
     const ly = r.ty + cos(normHdg(r.hdg+180)) * 3.5;
     const { px, py } = nm2px(lx, ly);
     ctx.fillText(r.id, px-8, py+3);
   });
 
-  // Waypoints (triangle symbol)
+  // Waypoints
   WAYPOINTS.forEach(wp => {
     const { px,py } = nm2px(wp.x, wp.y);
     ctx.strokeStyle='#1a5a1a'; ctx.lineWidth=1;
@@ -629,20 +819,53 @@ function drawRadar() {
     ctx.fillText(wp.id, px+7, py+4);
   });
 
-  // Airport: small dot only (runways already show the position)
+  // Airport dot
   const { px:ax, py:ay } = nm2px(0,0);
   ctx.fillStyle='#2a6a2a';
   ctx.beginPath(); ctx.arc(ax,ay,3,0,Math.PI*2); ctx.fill();
+
+  // Feature 4: Conflict prediction lines — draw before aircraft blips
+  drawConflictPredictions();
 
   // Aircraft
   G.acs.forEach(ac => {
     if (ac.removed) return;
     const isSel = G.selected && G.selected.uid===ac.uid;
+
+    // Feature 5: blip color by altitude (overridden by conflict/select)
+    const baseCol = altColor(ac.alt);
     const col = ac.conflict ? '#ff4444'
       : isSel ? '#ffffff'
-      : ac.kind==='arr' ? '#33aaff' : '#ffaa33';
+      : baseCol;
 
     const { px,py } = nm2px(ac.x, ac.y);
+
+    // Feature 1: Holding circle (dashed, radius 4nm)
+    if (ac.holding) {
+      ctx.setLineDash([4,4]);
+      ctx.strokeStyle = '#336633';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(px, py, 4*PX, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Feature 6: Direct-to dotted line
+    if (ac.directTo && WP[ac.directTo]) {
+      const wp = WP[ac.directTo];
+      const tp = nm2px(wp.x, wp.y);
+      ctx.setLineDash([2,4]);
+      ctx.strokeStyle = '#2a6a4a';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(tp.px, tp.py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
 
     // Trail dots
     ac.trail.forEach((t,i) => {
@@ -692,17 +915,95 @@ function drawRadar() {
       ctx.beginPath(); ctx.arc(px,py,10,0,Math.PI*2); ctx.stroke();
     }
 
+    // Feature 3: Emergency ring (flashing red)
+    if (ac.emergency && ac.emergencyTimer > 0) {
+      const flashOn = Math.floor(G.realTime * 2) % 2 === 0;
+      if (flashOn) {
+        ctx.strokeStyle='#ff0000'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(px,py,13,0,Math.PI*2); ctx.stroke();
+      }
+    }
+
     // Data tag
-    ctx.fillStyle=col;
+    ctx.fillStyle = col;
     ctx.font='bold 10px Courier New';
     ctx.fillText(ac.cs, px+8, py-3);
-    ctx.fillStyle= ac.conflict ? '#ff8888' : col+'bb';
+    ctx.fillStyle = ac.conflict ? '#ff8888' : col+'bb';
     ctx.font='10px Courier New';
     const flStr = ac.fl.toString().padStart(3,'0');
-    const hdgStr= Math.round(ac.hdg).toString().padStart(3,'0');
     const stTag = ac.state==='approach'?'APP':(ac.state==='final'?`IL${ac.appRwy}`:'');
-    ctx.fillText(`${flStr} ${Math.round(ac.spd)}kts ${stTag}`, px+8, py+9);
+    const holdTag = ac.holding ? 'HOLD' : '';
+    const emgTag  = (ac.emergency && ac.emergencyTimer > 0) ?
+      `⚡${Math.ceil(ac.emergencyTimer)}s` : '';
+    const tagExtra = emgTag || holdTag || stTag;
+    ctx.fillText(`${flStr} ${Math.round(ac.spd)}kts ${tagExtra}`, px+8, py+9);
   });
+}
+
+// Feature 4: Conflict prediction lines
+function drawConflictPredictions() {
+  const live = G.acs.filter(a => !a.removed && a.state !== 'landing');
+  const PRED_SECS = 120; // 2 minutes of sim time
+  for (let i = 0; i < live.length; i++) {
+    for (let j = i+1; j < live.length; j++) {
+      const a = live[i], b = live[j];
+      const curDist = dst(a.x, a.y, b.x, b.y);
+      if (curDist > 15) continue; // only check close pairs
+
+      // Predict positions in 2 sim-minutes
+      const nmpsA = a.spd / 3600;
+      const nmpsB = b.spd / 3600;
+      const axP = a.x + sin(a.hdg) * nmpsA * PRED_SECS + WIND.dx * PRED_SECS;
+      const ayP = a.y + cos(a.hdg) * nmpsA * PRED_SECS + WIND.dy * PRED_SECS;
+      const bxP = b.x + sin(b.hdg) * nmpsB * PRED_SECS + WIND.dx * PRED_SECS;
+      const byP = b.y + cos(b.hdg) * nmpsB * PRED_SECS + WIND.dy * PRED_SECS;
+      const predDist = dst(axP, ayP, bxP, byP);
+
+      // Only draw if converging
+      if (predDist >= curDist) continue;
+
+      const isDanger  = predDist < 5;
+      const isWarning = predDist < 15;
+      if (!isWarning) continue;
+
+      const lineCol = isDanger ? '#ff4444' : '#ffdd33';
+
+      const pa = nm2px(a.x, a.y);
+      const pb = nm2px(b.x, b.y);
+      const paP = nm2px(axP, ayP);
+      const pbP = nm2px(bxP, byP);
+
+      ctx.setLineDash([4,4]);
+      ctx.strokeStyle = lineCol;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = isDanger ? 0.8 : 0.5;
+
+      // Line from current A to predicted A
+      ctx.beginPath();
+      ctx.moveTo(pa.px, pa.py);
+      ctx.lineTo(paP.px, paP.py);
+      ctx.stroke();
+
+      // Line from current B to predicted B
+      ctx.beginPath();
+      ctx.moveTo(pb.px, pb.py);
+      ctx.lineTo(pbP.px, pbP.py);
+      ctx.stroke();
+
+      // Small X at predicted positions
+      ctx.beginPath();
+      ctx.moveTo(paP.px-4, paP.py-4); ctx.lineTo(paP.px+4, paP.py+4);
+      ctx.moveTo(paP.px+4, paP.py-4); ctx.lineTo(paP.px-4, paP.py+4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(pbP.px-4, pbP.py-4); ctx.lineTo(pbP.px+4, pbP.py+4);
+      ctx.moveTo(pbP.px+4, pbP.py-4); ctx.lineTo(pbP.px-4, pbP.py+4);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+  }
 }
 
 function drawLine(x1,y1,x2,y2) {
@@ -715,13 +1016,23 @@ function renderStrips() {
   const live = G.acs.filter(a=>!a.removed);
   el.innerHTML = live.map(ac => {
     const isSel = G.selected && G.selected.uid===ac.uid;
-    const cls = `strip ${ac.kind}${ac.conflict?' warn':''}${isSel?' selected':''}`;
+    const isEmg = ac.emergency && ac.emergencyTimer > 0;
+    let cls = `strip ${ac.kind}`;
+    if (isEmg)       cls += ' emergency';
+    else if (ac.conflict) cls += ' warn';
+    if (isSel)       cls += ' selected';
+
     const icon = ac.state==='approach'?'↘':ac.state==='final'?'▼':ac.kind==='dep'?'↑':'→';
-    const state = ac.state==='approach'||ac.state==='final' ? ac.appRwy : (ac.dest||'');
+    let state = ac.state==='approach'||ac.state==='final' ? ac.appRwy : (ac.dest||'');
+    if (ac.holding) state = 'HOLD';
+    if (ac.directTo) state = `D→${ac.directTo}`;
+    if (isEmg) state = `⚡${Math.ceil(ac.emergencyTimer)}s`;
+
     const fl  = ac.fl.toString().padStart(3,'0');
     const hdg = Math.round(ac.hdg).toString().padStart(3,'0');
+    const emgStyle = isEmg ? ' style="color:#ff4444"' : '';
     return `<div class="${cls}" data-uid="${ac.uid}">\
-${icon} <b>${ac.cs}</b> <span style="color:#1a7a1a">${state}</span><br>\
+${icon} <b${emgStyle}>${ac.cs}</b> <span style="color:#${isEmg?'ff2222':'1a7a1a'}">${state}</span><br>\
 <span style="color:#22aa22">FL${fl} ${hdg}°</span>\
 </div>`;
   }).join('');
@@ -743,8 +1054,12 @@ function renderAcInfo() {
     `A FL${h(ac.fl)}→${h(Math.round(ac.tAlt/100))}<br>` +
     `S ${Math.round(ac.spd)}→${Math.round(ac.tSpd)}kt<br>` +
     `<b>${ac.state.toUpperCase()}</b>` +
-    (ac.appRwy ? ` RWY${ac.appRwy}` : '') +
-    (ac.dest   ? `<br>→ ${ac.dest}` : '') +
+    (ac.appRwy  ? ` RWY${ac.appRwy}` : '') +
+    (ac.dest    ? `<br>→ ${ac.dest}` : '') +
+    (ac.holding ? '<br><span style="color:#44ff44">HOLDING</span>' : '') +
+    (ac.directTo? `<br>DIRECT ${ac.directTo}` : '') +
+    (ac.emergency && ac.emergencyTimer>0 ?
+      `<br><span style="color:#ff0000">⚡ MAYDAY ${Math.ceil(ac.emergencyTimer)}s</span>` : '') +
     (ac.conflict ? '<br><span style="color:#ff4444">⚠ CONFLICT</span>' : '');
 }
 
@@ -842,6 +1157,12 @@ function loop(ts) {
       G.nextSpawn = G.realTime + CFG.spawnMinR + Math.random()*(CFG.spawnMaxR-CFG.spawnMinR);
     }
 
+    // Feature 3: Emergency trigger
+    if (G.realTime >= G.nextEmergency) {
+      triggerEmergency();
+      G.nextEmergency = G.realTime + 90 + Math.random() * 60;
+    }
+
     // Update each AC
     G.acs.forEach(ac => {
       if (ac.removed) return;
@@ -849,22 +1170,30 @@ function loop(ts) {
 
       // Landed
       if (ac.state==='landing') {
-        G.score+=100; G.landed++;
-        msg(`✔ ${ac.cs} LANDED RWY${ac.appRwy} +100pts`, 'msg-ok');
+        const pts = ac.emergency ? 250 : 100;
+        G.score += pts; G.landed++;
+        LEVEL.completions++;
+        msg(`✔ ${ac.cs} LANDED RWY${ac.appRwy} +${pts}pts${ac.emergency?' ⚡MAYDAY BONUS':''}`, 'msg-ok');
         freeCS(ac.cs); ac.removed=true;
         if (G.selected?.uid===ac.uid) G.selected=null;
         renderScore();
+        checkLevelUp();
       }
 
-      // Departure reached waypoint
-      if (!ac.removed && ac.kind==='dep' && ac.dest) {
-        const wp = WP[ac.dest];
-        if (wp && dst(ac.x,ac.y,wp.x,wp.y)<2) {
-          G.score+=50; G.departed++;
-          msg(`✔ ${ac.cs} DEPARTED → ${ac.dest} +50pts`, 'msg-ok');
-          freeCS(ac.cs); ac.removed=true;
-          if (G.selected?.uid===ac.uid) G.selected=null;
-          renderScore();
+      // Departure reached waypoint (dest or directTo target)
+      if (!ac.removed && ac.kind==='dep') {
+        const targetId = ac.directTo || ac.dest;
+        if (targetId) {
+          const wp = WP[targetId];
+          if (wp && dst(ac.x,ac.y,wp.x,wp.y)<3) {
+            G.score+=50; G.departed++;
+            LEVEL.completions++;
+            msg(`✔ ${ac.cs} DEPARTED → ${targetId} +50pts`, 'msg-ok');
+            freeCS(ac.cs); ac.removed=true;
+            if (G.selected?.uid===ac.uid) G.selected=null;
+            renderScore();
+            checkLevelUp();
+          }
         }
       }
 
@@ -896,6 +1225,7 @@ function loop(ts) {
 // ============================================================
 initCanvas();
 updateScale();
+initWind();
 window.addEventListener('resize', () => { initCanvas(); updateScale(); });
 
 // Initial draw (before game starts)
