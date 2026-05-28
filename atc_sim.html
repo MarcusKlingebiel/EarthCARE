@@ -396,15 +396,15 @@ class AC {
       this.trailT = 0;
     }
 
-    // Feature 3: Emergency countdown
+    // Feature 3: Emergency countdown → crash on expiry
     if (this.emergency && this.state !== 'final' && this.state !== 'landing') {
       this.emergencyTimer -= sdt;
       if (this.emergencyTimer <= 0 && !this.emergencyWarned) {
         this.emergencyWarned = true;
-        G.score -= 300;
-        msg(`⚡ ${this.cs} EMERGENCY EXPIRED -300pts`, 'msg-emg');
+        this.crashed = true;
+        G.score -= 500;
+        msg(`💥 ${this.cs} CRASHED — FUEL EXHAUSTED -500pts`, 'msg-emg');
         renderScore();
-        this.emergency = false; // stop counting further
       }
     }
 
@@ -566,6 +566,7 @@ const G = {
   started:   false,
   // Feature 3: Emergency timer
   nextEmergency: 90 + Math.random() * 60,  // real seconds
+  crashMarkers: [],  // [{x,y,ttl}] — brief red X after crash
 };
 
 function freeCS(cs) { G.usedCS.delete(cs); }
@@ -968,6 +969,21 @@ function drawRadar() {
     const tagExtra = emgTag || holdTag || stTag;
     ctx.fillText(`${flStr} ${Math.round(ac.spd)}kts ${tagExtra}`, px+8, py+9);
   });
+
+  // Crash markers — red X that fades over 4 seconds
+  G.crashMarkers.forEach(m => {
+    const { px, py } = nm2px(m.x, m.y);
+    const alpha = Math.min(1, m.ttl / 2);
+    const s = 10;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = '#ff2200';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(px-s, py-s); ctx.lineTo(px+s, py+s);
+    ctx.moveTo(px+s, py-s); ctx.lineTo(px-s, py+s);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
 }
 
 // Feature 4: Conflict prediction lines
@@ -1201,6 +1217,17 @@ function loop(ts) {
       if (ac.removed) return;
       ac.update(dt);
 
+      // Crashed
+      if (ac.crashed) {
+        G.crashMarkers.push({ x: ac.x, y: ac.y, ttl: 4.0 }); // 4 real-sec marker
+        freeCS(ac.cs); ac.removed=true;
+        if (G.selected?.uid===ac.uid) G.selected=null;
+        const c = document.getElementById('radar');
+        c.style.boxShadow = '0 0 0 6px #ff0000, 0 0 40px #ff0000';
+        setTimeout(() => c.style.boxShadow = '', 800);
+        return;
+      }
+
       // Landed
       if (ac.state==='landing') {
         const pts = ac.emergency ? 250 : 100;
@@ -1243,6 +1270,7 @@ function loop(ts) {
     });
 
     G.acs = G.acs.filter(a=>!a.removed);
+    G.crashMarkers = G.crashMarkers.filter(m => { m.ttl -= dt; return m.ttl > 0; });
     checkConflicts();
   }
 
