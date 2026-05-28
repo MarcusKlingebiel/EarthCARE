@@ -600,18 +600,25 @@ function spawn() {
     msg(`${ac.cs} (${ac.acType}) ARRIVAL FL${Math.round(alt/100).toString().padStart(3,'0')} ${spd}kts`, 'msg-ok');
   } else {
     const destWp = WAYPOINTS[Math.floor(Math.random()*WAYPOINTS.length)];
+    // Pick a preferred (into-wind) runway for departure
+    const depRwyIds = WIND.preferredRwys.length ? WIND.preferredRwys : RUNWAYS.map(r=>r.id);
+    const rId = depRwyIds[Math.floor(Math.random()*depRwyIds.length)];
+    const r = RWY[rId];
+    const rwIdx = RUNWAYS.findIndex(rr => rr.id === rId);
+    const hl = rwIdx < 4 ? 4.0 : (rwIdx < 6 ? 3.5 : 3.0);
+    // Start at the far (upwind) end of the runway
     const ac = new AC({
       cs:   nextCS(),
       kind: 'dep',
-      x:    (Math.random()-.5)*.8,
-      y:    (Math.random()-.5)*.8,
-      hdg:  normHdg(bearing(0,0,destWp.x,destWp.y)),
+      x:    r.tx - sin(r.hdg) * hl,
+      y:    r.ty - cos(r.hdg) * hl,
+      hdg:  r.hdg,
       alt:  0, spd: 0, dest: destWp.id,
     });
     ac.tSpd = 280 + Math.floor(Math.random()*60);
     ac.tAlt = 10000 + Math.floor(Math.random()*4)*1000;
     G.acs.push(ac);
-    msg(`${ac.cs} (${ac.acType}) DEPARTURE → ${destWp.id}`, '');
+    msg(`${ac.cs} (${ac.acType}) DEPARTURE RWY${rId} → ${destWp.id}`, '');
   }
 }
 
@@ -624,9 +631,12 @@ function triggerEmergency() {
   if (arrivals.length === 0) return;
   const ac = arrivals[Math.floor(Math.random() * arrivals.length)];
   ac.emergency = true;
-  ac.emergencyTimer = 1800; // sim-seconds (= 3 real min at simRate 10)
+  const timerSim = 900 + Math.random() * 900; // 900–1800 sim-sec = 1.5–3.0 real min
+  ac.emergencyTimer = timerSim;
   ac.tSpd = Math.min(ac.tSpd, 220);
-  msg(`⚡ MAYDAY: ${ac.cs} FUEL EMERGENCY — land within 3 min!`, 'msg-emg');
+  const realSec = Math.round(timerSim / CFG.simRate);
+  const tm = Math.floor(realSec/60), ts = realSec%60;
+  msg(`⚡ MAYDAY: ${ac.cs} FUEL EMERGENCY — land within ${tm}:${ts.toString().padStart(2,'0')} min!`, 'msg-emg');
 }
 
 // ============================================================
@@ -657,12 +667,13 @@ function checkConflicts() {
 // ============================================================
 //  COMMANDS
 // ============================================================
-function parseCmd(raw) {
-  const ac = G.selected;
-  if (!ac || ac.removed) { msg('Select an aircraft first', 'msg-warn'); return; }
-  const parts = raw.trim().toLowerCase().split(/\s+/);
-  const cmd = parts[0], arg = parts[1];
+const _CMD_KEYS = new Set([
+  'h','hdg','heading','a','alt','altitude','s','spd','speed',
+  'app','ils','approach','l','tl','left','r','tr','right',
+  'hold','d','direct','dct',
+]);
 
+function _execCmd(ac, cmd, arg) {
   switch (cmd) {
     case 'h': case 'hdg': case 'heading': {
       let h = parseInt(arg);
@@ -686,7 +697,6 @@ function parseCmd(raw) {
     case 's': case 'spd': case 'speed': {
       const s = parseInt(arg);
       if (isNaN(s)||s<0||s>600) { msg('Invalid speed', 'msg-warn'); return; }
-      // Emergency aircraft: enforce 220 max if still in emergency
       const maxS = (ac.emergency && ac.emergencyTimer > 0) ? 220 : 600;
       ac.tSpd = Math.min(s, maxS);
       msg(`${ac.cs}: SPEED ${ac.tSpd}kts`);
@@ -696,9 +706,7 @@ function parseCmd(raw) {
       const ALIASES = {'27':'27L','9':'09R','09':'09R','36':'36','18':'18','14':'14','32':'32'};
       let rId = (arg || '27L').toUpperCase();
       if (ALIASES[rId]) rId = ALIASES[rId];
-      if (!RWY[rId]) {
-        msg(`Unknown runway "${rId}". Try: 27L 27R 09L 09R 18 36 14 32`, 'msg-warn'); return;
-      }
+      if (!RWY[rId]) { msg(`Unknown runway "${rId}". Try: 27L 27R 09L 09R 18 36 14 32`, 'msg-warn'); return; }
       if (ac.clearApp(rId)) {
         msg(`${ac.cs}: CLEARED ILS RWY ${rId} — watch for ↘ then ▼`, 'msg-ok');
       } else {
@@ -724,25 +732,17 @@ function parseCmd(raw) {
       msg(`${ac.cs}: TURN RIGHT ${deg}°`);
       break;
     }
-    // Feature 1: Hold
     case 'hold': {
-      if (ac.emergency) {
-        msg(`${ac.cs}: CANNOT HOLD — EMERGENCY!`, 'msg-err'); return;
-      }
-      ac.holding = true;
-      ac.holdX = ac.x;
-      ac.holdY = ac.y;
+      if (ac.emergency) { msg(`${ac.cs}: CANNOT HOLD — EMERGENCY!`, 'msg-err'); return; }
+      ac.holding = true; ac.holdX = ac.x; ac.holdY = ac.y;
       if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
       ac.directTo = null;
       msg(`${ac.cs}: HOLD right-hand pattern at current pos`, 'msg-ok');
       break;
     }
-    // Feature 6: Direct-to
     case 'd': case 'direct': case 'dct': {
       const wpId = (arg || '').toUpperCase();
-      if (!WP[wpId]) {
-        msg(`Unknown waypoint "${wpId}". Try: ${WAYPOINTS.map(w=>w.id).join(' ')}`, 'msg-warn'); return;
-      }
+      if (!WP[wpId]) { msg(`Unknown waypoint "${wpId}". Try: ${WAYPOINTS.map(w=>w.id).join(' ')}`, 'msg-warn'); return; }
       ac.directTo = wpId;
       ac.cancelHold();
       if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
@@ -752,6 +752,33 @@ function parseCmd(raw) {
     default:
       msg(`Unknown: ${cmd} — try h/a/s/app/l/r/hold/d`, 'msg-warn');
   }
+}
+
+function parseCmd(raw) {
+  const ac = G.selected;
+  if (!ac || ac.removed) { msg('Select an aircraft first', 'msg-warn'); return; }
+
+  const tokens = raw.trim().toLowerCase().split(/\s+/);
+
+  // Split into sub-commands at each recognized keyword
+  const subcmds = [];
+  let cur = null;
+  for (const tok of tokens) {
+    if (_CMD_KEYS.has(tok)) {
+      if (cur) subcmds.push(cur);
+      cur = [tok];
+    } else if (cur) {
+      cur.push(tok);
+    }
+  }
+  if (cur) subcmds.push(cur);
+
+  if (subcmds.length === 0) {
+    msg(`Unknown: ${tokens[0]} — try h/a/s/app/l/r/hold/d`, 'msg-warn');
+    return;
+  }
+
+  for (const parts of subcmds) _execCmd(ac, parts[0], parts[1]);
   renderAcInfo();
 }
 
