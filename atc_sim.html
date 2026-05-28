@@ -729,7 +729,7 @@ const G = {
   paused:    false,
   started:   false,
   // Feature 3: Emergency timer
-  nextEmergency: 90 + Math.random() * 60,  // real seconds
+  nextEmergency: 180 + Math.random() * 60,  // real seconds
   crashMarkers: [],  // [{x,y,ttl}] — brief red X after crash
   warnedPairs:  new Set(),  // uid/uid keys of pairs already penalised this conflict
 };
