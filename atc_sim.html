@@ -750,9 +750,9 @@ const canvas = document.getElementById('radar');
 const ctx    = canvas.getContext('2d');
 
 function drawRadar() {
-  const { size:S } = CFG;
+  const S = canvas.width, SH = canvas.height;
   ctx.fillStyle = '#010e01';
-  ctx.fillRect(0, 0, S, S);
+  ctx.fillRect(0, 0, S, SH);
 
   // Range rings
   ctx.lineWidth = 1;
