@@ -417,29 +417,34 @@ const WIND = {
   preferredRwys: [],
 };
 
-function initWind() {
-  if (RUNWAYS.length === 0) return;
-  WIND.from = Math.floor(Math.random() * 36) * 10;
-  WIND.spd  = 5 + Math.floor(Math.random() * 20);
-
-  // Preferred runways: those whose landing heading is closest to wind-from direction
-  // (land into wind → runway heading ≈ wind-from)
+function _applyWind() {
   const scores = RUNWAYS.map(r => ({
     id: r.id,
     diff: Math.abs(hdgDiff(r.hdg, WIND.from)),
   }));
   scores.sort((a,b) => a.diff - b.diff);
-  // Mark the best 2 (may be parallel pair) as preferred
   const threshold = scores[0].diff + 15;
   WIND.preferredRwys = scores.filter(s => s.diff <= threshold).map(s => s.id);
-
-  // Wind drift components (nm/sim-sec): wind pushes aircraft in wind-TO direction
   const windTo = normHdg(WIND.from + 180);
-  WIND.dx = sin(windTo) * WIND.spd / 3600;  // nm per sim-sec eastward
-  WIND.dy = cos(windTo) * WIND.spd / 3600;  // nm per sim-sec northward
-
+  WIND.dx = sin(windTo) * WIND.spd / 3600;
+  WIND.dy = cos(windTo) * WIND.spd / 3600;
   document.getElementById('wind-display').textContent =
-    `WND ${WIND.from.toString().padStart(3,'0')}/${WIND.spd.toString().padStart(2,'0')}`;
+    `WND ${WIND.from.toString().padStart(3,'0')}/${Math.round(WIND.spd).toString().padStart(2,'0')}`;
+}
+
+function initWind() {
+  if (RUNWAYS.length === 0) return;
+  WIND.from = Math.floor(Math.random() * 36) * 10;
+  WIND.spd  = 5 + Math.floor(Math.random() * 20);
+  _applyWind();
+}
+
+function updateWind() {
+  const shift = (Math.random() < 0.5 ? -1 : 1) * (20 + Math.floor(Math.random() * 7) * 10);
+  WIND.from = normHdg(WIND.from + shift);
+  WIND.spd  = Math.max(5, Math.min(30, WIND.spd + Math.round((Math.random() * 10 - 5))));
+  _applyWind();
+  msg(`📡 ATIS: Wind ${WIND.from.toString().padStart(3,'0')}°/${Math.round(WIND.spd)}kt — preferred: ${WIND.preferredRwys.join(' ')}`, 'msg-warn');
 }
 
 // ============================================================
@@ -664,9 +669,12 @@ class AC {
     if (this.state === 'approach') {
       if (Math.abs(cross) < 0.25 && Math.abs(hdgDiff(this.hdg, r.hdg)) < 20 && along > 0.5) {
         this.state = 'final';
-        // ~12% chance of go-around, triggered 3–6nm before threshold
-        if (!this.emergency && Math.random() < 0.12) {
-          this.goAroundAt = 3 + Math.random() * 3;
+        // Go-around more likely on non-preferred (tail/crosswind) runway
+        if (!this.emergency) {
+          const pref = WIND.preferredRwys.includes(this.appRwy);
+          if (Math.random() < (pref ? 0.08 : 0.28)) {
+            this.goAroundAt = 3 + Math.random() * 3;
+          }
         }
       } else {
         const lookAhead = Math.max(along + 8, 8);
@@ -729,7 +737,8 @@ const G = {
   paused:    false,
   started:   false,
   // Feature 3: Emergency timer
-  nextEmergency: 180 + Math.random() * 60,  // real seconds
+  nextEmergency:  180 + Math.random() * 60,   // real seconds
+  nextWindChange: 120 + Math.random() * 120,  // real seconds
   crashMarkers: [],  // [{x,y,ttl}] — brief red X after crash
   warnedPairs:  new Set(),  // uid/uid keys of pairs already penalised this conflict
 };
@@ -1410,6 +1419,12 @@ function loop(ts) {
     if (G.realTime >= G.nextEmergency) {
       triggerEmergency();
       G.nextEmergency = G.realTime + 90 + Math.random() * 60;
+    }
+
+    // Wind shift
+    if (G.realTime >= G.nextWindChange) {
+      updateWind();
+      G.nextWindChange = G.realTime + 120 + Math.random() * 120;
     }
 
     // Update each AC
