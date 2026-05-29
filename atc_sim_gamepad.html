@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ATC Radar Simulator</title>
+<title>ATC Radar Simulator — Gamepad Edition</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
@@ -54,6 +54,7 @@ canvas.level-up {
 .strip.dep { border-left:3px solid #ffaa33; }
 .strip.warn { border-left:3px solid #ff3333; animation:blink .5s infinite; }
 .strip.emergency { border-left:3px solid #ff0000 !important; background:#1a0000 !important; animation:blink .35s infinite; }
+.strip.gp-focus { outline:2px solid #00ffff; background:#001a1a !important; }
 /* Floating overlays on the canvas */
 #ac-overlay {
   position:absolute; top:8px; left:8px;
@@ -62,7 +63,7 @@ canvas.level-up {
   pointer-events:none; min-width:130px; display:none;
 }
 #msg-overlay {
-  position:absolute; bottom:68px; left:8px;
+  position:absolute; bottom:90px; left:8px;
   font-size:12px; line-height:1.5;
   pointer-events:none; max-width:340px;
 }
@@ -70,13 +71,32 @@ canvas.level-up {
 .msg-warn { color:#ffaa00; }
 .msg-err  { color:#ff4444; }
 .msg-emg  { color:#ff0000; font-weight:bold; }
+/* Gamepad HUD */
+#gp-hud {
+  position:absolute; bottom:0; left:0; right:155px;
+  background:rgba(0,5,0,.92); border-top:1px solid #1a4a1a;
+  padding:5px 10px; display:none;
+  flex-direction:column; gap:3px;
+  font-size:12px; pointer-events:none; z-index:5;
+}
+.gp-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.gp-btn {
+  background:#0a2a0a; border:1px solid #33ff33;
+  padding:1px 5px; border-radius:3px;
+  color:#33ff33; font-size:11px; white-space:nowrap;
+}
+.gp-label { color:#44ff44; font-weight:bold; min-width:50px; }
+.gp-val   { color:#ffffff; font-size:22px; font-weight:bold; letter-spacing:.05em; }
+.gp-ac-info { color:#22cc22; font-size:12px; }
+.gp-cmd-bar { display:flex; align-items:baseline; gap:10px; }
+.gp-mode  { color:#00ffff; font-weight:bold; font-size:11px; margin-right:4px; }
 #help-overlay {
   position:absolute; top:0; left:0; width:100%; height:100%;
   background:rgba(0,0,0,.88); display:flex; align-items:center;
   justify-content:center; z-index:10;
 }
 #help-box {
-  border:1px solid #1a6a1a; padding:20px 28px; max-width:500px;
+  border:1px solid #1a6a1a; padding:20px 28px; max-width:520px;
   font-size:12px; line-height:1.85;
 }
 #help-box h2 { color:#44ff44; margin-bottom:10px; font-size:16px; }
@@ -113,23 +133,7 @@ canvas.level-up {
 }
 .ap-btn:hover { background:#0f2a0f; border-color:#44ff44; }
 .ap-btn .icao { color:#1a8a1a; font-size:11px; }
-#gp-hud {
-  position:absolute; bottom:0; left:0; right:155px;
-  background:rgba(0,8,0,0.9); border-top:1px solid #1a5a1a;
-  display:flex; flex-direction:column; align-items:center;
-  justify-content:center; padding:4px 12px; gap:2px;
-  pointer-events:none; z-index:5;
-}
-#gp-info {
-  font-size:11px; color:#aaffaa; white-space:nowrap; overflow:hidden;
-}
-#gp-big {
-  font-size:20px; font-weight:bold; color:#44ff44; letter-spacing:0.05em;
-}
-#gp-hints {
-  font-size:10px; color:#1a8a1a; white-space:nowrap; overflow:hidden;
-}
-.strip.gp-focus { border-color:#00ccff !important; background:#001a1a !important; }
+.ap-btn.gp-focus { outline:2px solid #00ffff; background:#001515 !important; border-color:#00ffff; }
 </style>
 </head>
 <body>
@@ -141,35 +145,31 @@ canvas.level-up {
   <span id="wind-display" style="color:#aaffaa">WND ---/--</span>
   <span>
     <button id="speed-btn" onclick="cycleSpeed()">SIM ×<span id="speed-val">1</span></button>
-    &nbsp; [P] Pause &nbsp; [?] Help
+    &nbsp; [P] Pause
   </span>
 </div>
 
 <div id="main">
   <canvas id="radar"></canvas>
 
-  <!-- floating overlays on the canvas -->
   <div id="ac-overlay"></div>
   <div id="msg-overlay"></div>
+
+  <!-- Gamepad HUD -->
+  <div id="gp-hud"></div>
 
   <div id="sidebar">
     <div id="sidebar-title">STRIPS</div>
     <div id="strip-list"></div>
   </div>
-
-  <!-- Gamepad HUD — hidden until controller connects -->
-  <div id="gp-hud" style="display:none">
-    <div id="gp-info"></div>
-    <div id="gp-big"></div>
-    <div id="gp-hints"></div>
-  </div>
 </div>
 
-<!-- Help overlay -->
+<!-- Airport selection overlay -->
 <div id="airport-overlay">
   <div id="airport-box">
     <h2>ATC RADAR SIMULATOR</h2>
     <p style="color:#1a8a1a;text-align:center;font-size:13px;margin-bottom:4px">SELECT AIRPORT</p>
+    <p style="color:#00cccc;text-align:center;font-size:11px;margin-bottom:6px">🎮 D↑↓ browse · A confirm · or click</p>
     <div id="airport-grid">
       <button class="ap-btn" onclick="selectAirport('EDDF')">Frankfurt<br><span class="icao">EDDF · Germany</span></button>
       <button class="ap-btn" onclick="selectAirport('EDDM')">München<br><span class="icao">EDDM · Germany</span></button>
@@ -181,36 +181,38 @@ canvas.level-up {
   </div>
 </div>
 
+<!-- Help overlay -->
 <div id="help-overlay" style="display:none">
   <div id="help-box">
-    <h2>ATC RADAR SIMULATOR</h2>
+    <h2>ATC RADAR SIMULATOR — GAMEPAD EDITION</h2>
     <table>
-      <tr><td>h [deg]</td><td>Fly heading → h 270</td></tr>
-      <tr><td>a [FL]</td><td>Altitude → a 080 (= FL080)</td></tr>
-      <tr><td>s [kts]</td><td>Speed → s 220</td></tr>
-      <tr><td>l / r [deg]</td><td>Turn left/right → l 45</td></tr>
-      <tr><td>app [rwy]</td><td>Clear for ILS → app 27L</td></tr>
-      <tr><td>hold</td><td>Enter right-hand holding pattern</td></tr>
-      <tr><td>d [WPT]</td><td>Direct to waypoint → d NEE</td></tr>
-      <tr><td>P / X</td><td>Pause / cycle sim speed</td></tr>
+      <tr><td>D↑↓ (NAV)</td><td>Browse aircraft strips</td></tr>
+      <tr><td>A (NAV)</td><td>Select highlighted aircraft</td></tr>
+      <tr><td>LB / RB</td><td>Cycle command: HDG·ALT·SPD·APP·DCT·HOLD</td></tr>
+      <tr><td>D↑↓ (CMD)</td><td>Adjust value (small step)</td></tr>
+      <tr><td>D←→ (CMD)</td><td>Adjust value (big step)</td></tr>
+      <tr><td>A (CMD)</td><td>Send command</td></tr>
+      <tr><td>B</td><td>Back / deselect</td></tr>
+      <tr><td>X</td><td>HOLD pattern (instant)</td></tr>
+      <tr><td>Y</td><td>Switch to ILS/APP command</td></tr>
+      <tr><td>START</td><td>Pause / resume</td></tr>
+      <tr><td>Right stick ↕</td><td>Zoom radar in/out</td></tr>
     </table>
-
     <p style="margin-top:10px;color:#44ff88;font-size:12px;font-weight:bold">HOW TO LAND AN AIRCRAFT</p>
     <p style="color:#22cc22;font-size:11px;line-height:1.65">
-      1. <b>Click</b> the arrival aircraft (or its strip on the right)<br>
-      2. Type <b>h 270</b> to point it toward the runway from the east<br>
-      3. Descend: type <b>a 030</b> (= 3000 ft) while still 10–20nm out<br>
-      4. Type <b>app 27L</b> — aircraft intercepts the dashed ILS line<br>
-         and auto-lands. ↘ = intercepting, ▼ = on final.<br>
+      1. <b>D↑↓</b> to highlight the arrival, <b>A</b> to select it<br>
+      2. <b>RB → HDG</b>, adjust to point toward runway, <b>A</b> to send<br>
+      3. <b>RB → ALT</b>, set FL030 (3000ft) while 10–20nm out, <b>A</b> to send<br>
+      4. <b>Y</b> to jump to ILS, <b>D↑↓</b> pick runway, <b>A</b> to clear for ILS<br>
+         ↘ = intercepting · ▼ = on final · auto-lands!<br>
       <span id="rwy-list" style="color:#aaffaa"></span>
     </p>
     <p style="margin-top:6px;color:#1a8a1a;font-size:11px">
       Arrivals (blue strip) must land. Departures (orange strip) route to edge waypoints.<br>
-      Keep 3nm / 1000ft separation. Blip color = altitude band.<br>
-      ⚡ MAYDAY aircraft need landing within 3 min — priority landing!<br>
+      Keep 3nm / 1000ft separation. ⚡ MAYDAY = priority landing!<br>
       Every 5 completions advances level — faster spawns, more traffic.
     </p>
-    <button id="start-btn" onclick="startGame()">▶ START GAME</button>
+    <button id="start-btn" onclick="startGame()">▶ START GAME &nbsp; (or press A on gamepad)</button>
   </div>
 </div>
 
@@ -222,8 +224,8 @@ canvas.level-up {
 // ============================================================
 const CFG = {
   size: 0,
-  range:    80,   // current zoom radius (changes with scroll)
-  boundary: 120,   // fixed game boundary half-side in nm — never changes
+  range:    80,
+  boundary: 120,
   simRate: 10,
   simRates: [1, 2, 3],
   simRateIdx: 0,
@@ -237,7 +239,6 @@ const CFG = {
 };
 
 function initCanvas() {
-  // Let flex resolve first, then read actual pixel dimensions
   const c = document.getElementById('radar');
   c.width  = c.offsetWidth  || (window.innerWidth - 155);
   c.height = c.offsetHeight || (window.innerHeight - document.getElementById('header').offsetHeight);
@@ -248,7 +249,6 @@ function updateScale() {
   const c = document.getElementById('radar');
   CX = c.width  / 2;
   CY = c.height / 2;
-  // Keep radar circle fitting inside the canvas (based on shorter side)
   PX = Math.min(c.width, c.height) / 2 / CFG.range;
 }
 
@@ -414,14 +414,15 @@ function selectAirport(icao) {
   initWind();
   document.getElementById('airport-overlay').style.display = 'none';
   document.getElementById('help-overlay').style.display = 'flex';
+  if (GP.connected) GP.mode = 'help';
 }
 
 // ============================================================
-//  WIND  (Feature 2)
+//  WIND
 // ============================================================
 const WIND = {
-  from: 0,   // direction wind comes FROM (degrees)
-  spd:  0,   // knots
+  from: 0,
+  spd:  0,
   preferredRwys: [],
 };
 
@@ -456,35 +457,30 @@ function updateWind() {
 }
 
 // ============================================================
-//  LEVEL SYSTEM  (Feature 7)
+//  LEVEL SYSTEM
 // ============================================================
-const LEVEL = {
-  n: 1,
-  completions: 0,
-};
+const LEVEL = { n: 1, completions: 0 };
 
 function checkLevelUp() {
   const threshold = LEVEL.n * 5;
   if (LEVEL.completions >= threshold) {
     LEVEL.n++;
-    // Update spawn config
     CFG.spawnMinR = Math.max(8, 35 - LEVEL.n * 3);
     CFG.spawnMaxR = Math.max(12, 50 - LEVEL.n * 5);
     CFG.maxAC     = Math.min(12, 6 + LEVEL.n);
     document.getElementById('level-display').textContent = `LEVEL ${LEVEL.n}`;
     msg(`▲ LEVEL UP! Now Level ${LEVEL.n} — max ${CFG.maxAC} aircraft`, 'msg-ok');
     updateWind();
-    // Flash canvas border
     const c = document.getElementById('radar');
     c.classList.remove('level-up');
-    void c.offsetWidth; // reflow to restart animation
+    void c.offsetWidth;
     c.classList.add('level-up');
     setTimeout(() => c.classList.remove('level-up'), 1500);
   }
 }
 
 // ============================================================
-//  ALTITUDE COLOR (Feature 5)
+//  ALTITUDE COLOR
 // ============================================================
 function altColor(alt) {
   if (alt >= 10000) return '#33ff33';
@@ -525,33 +521,24 @@ class AC {
     this.trailT = 0;
     this.conflict   = false;
     this.removed    = false;
-
-    // Feature 1: Holding
     this.holding      = false;
     this.holdX        = 0;
     this.holdY        = 0;
-
-    this.goAroundAt   = null;  // nm from threshold to trigger go-around (null = none)
-
-    // Feature 3: Emergency
+    this.goAroundAt   = null;
     this.emergency    = false;
-    this.emergencyTimer = 0;   // sim-seconds remaining before penalty
+    this.emergencyTimer = 0;
     this.emergencyWarned = false;
-
-    // Feature 6: Direct-to
-    this.directTo     = null;  // waypoint id
+    this.crashed      = false;
+    this.directTo     = null;
   }
 
   get fl() { return Math.round(this.alt / 100); }
 
-  cancelHold() {
-    this.holding = false;
-  }
+  cancelHold() { this.holding = false; }
 
   update(dt) {
     const sdt = dt * CFG.simRate * CFG.simRates[CFG.simRateIdx];
 
-    // Trail
     this.trailT += sdt;
     if (this.trailT >= CFG.trailEvery) {
       this.trail.push({ x:this.x, y:this.y });
@@ -559,7 +546,6 @@ class AC {
       this.trailT = 0;
     }
 
-    // Feature 3: Emergency countdown → crash on expiry
     if (this.emergency && this.state !== 'landing') {
       this.emergencyTimer -= sdt;
       if (this.emergencyTimer <= 0 && !this.emergencyWarned) {
@@ -571,27 +557,20 @@ class AC {
       }
     }
 
-    // Feature 6: Direct-to heading update
     if (this.directTo && !this.holding && this.state === 'enroute') {
       const wp = WP[this.directTo];
-      if (wp) {
-        this.tHdg = bearing(this.x, this.y, wp.x, wp.y);
-      }
+      if (wp) this.tHdg = bearing(this.x, this.y, wp.x, wp.y);
     }
 
-    // Feature 1: Holding — turn right continuously
     if (this.holding) {
-      this.tHdg = normHdg(this.hdg + 3 * sdt); // continuous right turn target
+      this.tHdg = normHdg(this.hdg + 3 * sdt);
     }
 
-    // Approach guidance
     if (this.state === 'approach' || this.state === 'final') {
       this._guideApproach(sdt);
     }
 
-    // Turn (3 deg/sim-sec)
     if (this.holding) {
-      // In hold, just rotate continuously right
       this.hdg = normHdg(this.hdg + 3 * sdt);
       this.tHdg = this.hdg;
     } else {
@@ -603,7 +582,6 @@ class AC {
       }
     }
 
-    // Altitude — faster on approach/final
     const dAlt = this.tAlt - this.alt;
     const vspd = (this.state === 'final' || this.state === 'approach') && dAlt < 0
       ? 4500 : 2500;
@@ -613,7 +591,6 @@ class AC {
       this.alt = this.tAlt;
     }
 
-    // Speed (5 kts/sec)
     const dSpd = this.tSpd - this.spd;
     if (Math.abs(dSpd) > 1) {
       this.spd += Math.sign(dSpd) * Math.min(5*sdt, Math.abs(dSpd));
@@ -621,18 +598,15 @@ class AC {
       this.spd = this.tSpd;
     }
 
-    // Position
     const nmps = this.spd / 3600;
     this.x += sin(this.hdg) * nmps * sdt;
     this.y += cos(this.hdg) * nmps * sdt;
 
-    // Feature 2: Wind drift (ILS holds centerline — no drift during approach/final)
     if (this.state !== 'approach' && this.state !== 'final') {
       this.x += WIND.dx * sdt;
       this.y += WIND.dy * sdt;
     }
 
-    // Landing check
     if (this.state === 'final' && this.appRwy) {
       const r = RWY[this.appRwy];
       const d = dst(this.x, this.y, r.tx, r.ty);
@@ -645,14 +619,10 @@ class AC {
       }
     }
 
-    // Feature 6: waypoint reach check for arrivals passing through
     if (this.directTo && this.state === 'enroute') {
       const wp = WP[this.directTo];
       if (wp && dst(this.x, this.y, wp.x, wp.y) < 3) {
-        if (this.kind === 'dep') {
-          // Let the main loop handle departure completion
-        } else {
-          // Arrival passed through waypoint — just clear the direct-to
+        if (this.kind !== 'dep') {
           msg(`${this.cs}: PASSING ${this.directTo}`, '');
           this.directTo = null;
         }
@@ -678,7 +648,6 @@ class AC {
     if (this.state === 'approach') {
       if (Math.abs(cross) < 0.25 && Math.abs(hdgDiff(this.hdg, r.hdg)) < 20 && along > 0.5) {
         this.state = 'final';
-        // Go-around more likely on non-preferred (tail/crosswind) runway
         if (!this.emergency) {
           const pref = WIND.preferredRwys.includes(this.appRwy);
           if (Math.random() < (pref ? 0.08 : 0.28)) {
@@ -696,12 +665,11 @@ class AC {
     }
 
     if (this.state === 'final') {
-      // Go-around trigger
       if (this.goAroundAt !== null && dToThr < this.goAroundAt) {
         this.state = 'enroute';
         this.appRwy = null;
         this.goAroundAt = null;
-        this.tHdg = r.hdg;   // continue on runway heading
+        this.tHdg = r.hdg;
         this.tAlt = 3000;
         this.tSpd = 200;
         msg(`${this.cs}: GO AROUND — re-sequence for ILS`, 'msg-warn');
@@ -709,7 +677,6 @@ class AC {
       }
       this.tHdg = r.hdg;
       const gsAlt = Math.max(0, dToThr * 318);
-      // Only ratchet down — don't pull aircraft back up if it dips below glideslope
       this.tAlt = Math.min(this.tAlt, gsAlt);
       if (dToThr < 10) this.tSpd = Math.min(this.tSpd, 200);
       if (dToThr <  5) this.tSpd = Math.min(this.tSpd, 165);
@@ -745,10 +712,9 @@ const G = {
   usedCS:    new Set(),
   paused:    false,
   started:   false,
-  // Feature 3: Emergency timer
-  nextEmergency:  360 + Math.random() * 120,   // real seconds
-  crashMarkers: [],  // [{x,y,ttl}] — brief red X after crash
-  warnedPairs:  new Set(),  // uid/uid keys of pairs already penalised this conflict
+  nextEmergency:  360 + Math.random() * 120,
+  crashMarkers: [],
+  warnedPairs:  new Set(),
 };
 
 function freeCS(cs) { G.usedCS.delete(cs); }
@@ -771,7 +737,6 @@ function spawn() {
   if (isArr) {
     const alt = 8000 + Math.floor(Math.random()*7)*1000;
     const spd = 280 + Math.floor(Math.random()*80);
-    // Scale waypoint direction out to boundary edge
     const wpDist = Math.hypot(wp.x, wp.y) || 1;
     const scale  = CFG.boundary / wpDist;
     const sx = wp.x * scale + (Math.random()-.5)*8;
@@ -779,8 +744,7 @@ function spawn() {
     const ac = new AC({
       cs:   nextCS(),
       kind: 'arr',
-      x:    sx,
-      y:    sy,
+      x:    sx, y:    sy,
       hdg:  bearing(sx, sy, 0, 0),
       alt, spd,
     });
@@ -788,12 +752,10 @@ function spawn() {
     msg(`${ac.cs} (${ac.acType}) ARRIVAL FL${Math.round(alt/100).toString().padStart(3,'0')} ${spd}kts`, 'msg-ok');
   } else {
     const destWp = WAYPOINTS[Math.floor(Math.random()*WAYPOINTS.length)];
-    // Pick a preferred (into-wind) runway for departure
     const depRwyIds = WIND.preferredRwys.length ? WIND.preferredRwys : RUNWAYS.map(r=>r.id);
     const rId = depRwyIds[Math.floor(Math.random()*depRwyIds.length)];
     const r = RWY[rId];
     const hl = r.hl || 3.5;
-    // Start at the far (upwind) end of the runway
     const ac = new AC({
       cs:   nextCS(),
       kind: 'dep',
@@ -810,7 +772,7 @@ function spawn() {
 }
 
 // ============================================================
-//  FEATURE 3: EMERGENCY EVENTS
+//  EMERGENCY
 // ============================================================
 function triggerEmergency() {
   const arrivals = G.acs.filter(a => !a.removed && a.kind === 'arr' && !a.emergency &&
@@ -818,7 +780,7 @@ function triggerEmergency() {
   if (arrivals.length === 0) return;
   const ac = arrivals[Math.floor(Math.random() * arrivals.length)];
   ac.emergency = true;
-  const timerSim = 900 + Math.random() * 900; // 900–1800 sim-sec = 1.5–3.0 real min
+  const timerSim = 900 + Math.random() * 900;
   ac.emergencyTimer = timerSim;
   ac.tSpd = Math.min(ac.tSpd, 220);
   const realSec = Math.round(timerSim / CFG.simRate);
@@ -853,7 +815,6 @@ function checkConflicts() {
       }
     }
   }
-  // Clear pairs that are no longer conflicting
   for (const k of G.warnedPairs) { if (!active.has(k)) G.warnedPairs.delete(k); }
 }
 
@@ -899,7 +860,7 @@ function _execCmd(ac, cmd, arg) {
       const ALIASES = {'27':'27L','9':'09R','09':'09R','36':'36','18':'18','14':'14','32':'32'};
       let rId = (arg || '27L').toUpperCase();
       if (ALIASES[rId]) rId = ALIASES[rId];
-      if (!RWY[rId]) { msg(`Unknown runway "${rId}". Try: 27L 27R 09L 09R 18 36 14 32`, 'msg-warn'); return; }
+      if (!RWY[rId]) { msg(`Unknown runway "${rId}". Try: ${RUNWAYS.map(r=>r.id).join(' ')}`, 'msg-warn'); return; }
       if (ac.clearApp(rId)) {
         msg(`${ac.cs}: CLEARED ILS RWY ${rId} — watch for ↘ then ▼`, 'msg-ok');
       } else {
@@ -910,8 +871,7 @@ function _execCmd(ac, cmd, arg) {
     case 'l': case 'tl': case 'left': {
       const deg = parseInt(arg)||30;
       ac.tHdg = normHdg(ac.hdg - deg);
-      ac.cancelHold();
-      ac.directTo = null;
+      ac.cancelHold(); ac.directTo = null;
       if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
       msg(`${ac.cs}: TURN LEFT ${deg}°`);
       break;
@@ -919,8 +879,7 @@ function _execCmd(ac, cmd, arg) {
     case 'r': case 'tr': case 'right': {
       const deg = parseInt(arg)||30;
       ac.tHdg = normHdg(ac.hdg + deg);
-      ac.cancelHold();
-      ac.directTo = null;
+      ac.cancelHold(); ac.directTo = null;
       if (ac.state==='approach'||ac.state==='final') { ac.state='enroute'; ac.appRwy=null; }
       msg(`${ac.cs}: TURN RIGHT ${deg}°`);
       break;
@@ -952,8 +911,6 @@ function parseCmd(raw) {
   if (!ac || ac.removed) { msg('Select an aircraft first', 'msg-warn'); return; }
 
   const tokens = raw.trim().toLowerCase().split(/\s+/);
-
-  // Split into sub-commands at each recognized keyword
   const subcmds = [];
   let cur = null;
   for (const tok of tokens) {
@@ -986,7 +943,6 @@ function drawRadar() {
   ctx.fillStyle = '#010e01';
   ctx.fillRect(0, 0, S, SH);
 
-  // Range rings
   ctx.lineWidth = 1;
   for (let r=10; r<=CFG.range; r+=10) {
     ctx.strokeStyle = r===20 ? '#0d1f0d' : '#091509';
@@ -998,7 +954,6 @@ function drawRadar() {
     ctx.fillText(`${r}nm`, CX+r*PX+3, CY-3);
   }
 
-  // Airspace boundary (fixed rectangle, visible even when zoomed in/out)
   {
     const b = CFG.boundary * PX;
     ctx.setLineDash([8, 4]);
@@ -1011,7 +966,6 @@ function drawRadar() {
     ctx.fillText('BOUNDARY', CX + b + 4, CY - b + 12);
   }
 
-  // Cardinal ticks & labels
   ['N','E','S','W'].forEach((lbl,i) => {
     const h = i*90;
     const rad = d2r(h); const r = CFG.range*PX;
@@ -1024,7 +978,6 @@ function drawRadar() {
     ctx.fillText(lbl, CX+Math.sin(rad)*(r-22)-4, CY-Math.cos(rad)*(r-22)+4);
   });
 
-  // ILS feathers — computed for preferred runways
   ctx.setLineDash([5,5]); ctx.lineWidth=1; ctx.strokeStyle='#0d2d18';
   WIND.preferredRwys.forEach(id => {
     const r = RWY[id]; if (!r) return;
@@ -1033,7 +986,6 @@ function drawRadar() {
   });
   ctx.setLineDash([]);
 
-  // Runways — Feature 2: preferred runways brighter
   RUNWAYS.forEach((r, i) => {
     const isMain = i < 4;
     const isPref = WIND.preferredRwys.includes(r.id);
@@ -1044,7 +996,6 @@ function drawRadar() {
              r.tx + sin(r.hdg)*hl, r.ty + cos(r.hdg)*hl);
   });
 
-  // Runway labels — placed beyond the approach end, off the centerline
   ctx.font = 'bold 13px Courier New';
   ctx.textAlign = 'center';
   RUNWAYS.forEach(r => {
@@ -1052,7 +1003,6 @@ function drawRadar() {
     ctx.fillStyle = isPref ? '#66ff66' : '#3a9a3a';
     const hl = r.hl || 3.5;
     const outHdg = normHdg(r.hdg + 180);
-    // 1.8nm beyond runway end, 1nm to the right of centerline
     const lx = r.tx + sin(outHdg)*(hl+1.8) + sin(normHdg(r.hdg+90))*1.0;
     const ly = r.ty + cos(outHdg)*(hl+1.8) + cos(normHdg(r.hdg+90))*1.0;
     const { px, py } = nm2px(lx, ly);
@@ -1060,7 +1010,6 @@ function drawRadar() {
   });
   ctx.textAlign = 'left';
 
-  // Waypoints
   WAYPOINTS.forEach(wp => {
     const { px,py } = nm2px(wp.x, wp.y);
     ctx.strokeStyle='#1a5a1a'; ctx.lineWidth=1;
@@ -1071,20 +1020,16 @@ function drawRadar() {
     ctx.fillText(wp.id, px+7, py+4);
   });
 
-  // Airport dot
   const { px:ax, py:ay } = nm2px(0,0);
   ctx.fillStyle='#2a6a2a';
   ctx.beginPath(); ctx.arc(ax,ay,3,0,Math.PI*2); ctx.fill();
 
-  // Feature 4: Conflict prediction lines — draw before aircraft blips
   drawConflictPredictions();
 
-  // Aircraft
   G.acs.forEach(ac => {
     if (ac.removed) return;
     const isSel = G.selected && G.selected.uid===ac.uid;
 
-    // Feature 5: blip color — departures cyan-blue, arrivals altitude-based
     const baseCol = ac.kind === 'dep' ? '#33aaff' : altColor(ac.alt);
     const col = ac.conflict ? '#ff4444'
       : isSel ? '#ffffff'
@@ -1092,7 +1037,6 @@ function drawRadar() {
 
     const { px,py } = nm2px(ac.x, ac.y);
 
-    // Feature 1: Holding circle (dashed, radius 4nm)
     if (ac.holding) {
       ctx.setLineDash([4,4]);
       ctx.strokeStyle = '#336633';
@@ -1103,7 +1047,6 @@ function drawRadar() {
       ctx.setLineDash([]);
     }
 
-    // Feature 6: Direct-to dotted line
     if (ac.directTo && WP[ac.directTo]) {
       const wp = WP[ac.directTo];
       const tp = nm2px(wp.x, wp.y);
@@ -1119,7 +1062,6 @@ function drawRadar() {
       ctx.globalAlpha = 1;
     }
 
-    // Trail dots
     ac.trail.forEach((t,i) => {
       const tp = nm2px(t.x,t.y);
       ctx.globalAlpha = (i+1)/(ac.trail.length+2)*0.55;
@@ -1128,7 +1070,6 @@ function drawRadar() {
     });
     ctx.globalAlpha=1;
 
-    // Short direction tick
     const tx = sin(ac.hdg), ty = cos(ac.hdg);
     ctx.strokeStyle=col; ctx.globalAlpha=0.8; ctx.lineWidth=1.5;
     ctx.beginPath();
@@ -1137,7 +1078,6 @@ function drawRadar() {
     ctx.stroke();
     ctx.globalAlpha=1;
 
-    // ILS line
     if (ac.state==='approach'||ac.state==='final') {
       const r = RWY[ac.appRwy];
       if (r) {
@@ -1149,7 +1089,6 @@ function drawRadar() {
       }
     }
 
-    // Blip
     ctx.fillStyle = col;
     if (isSel) {
       ctx.strokeStyle=col; ctx.lineWidth=1.5;
@@ -1161,13 +1100,11 @@ function drawRadar() {
       ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2); ctx.fill();
     }
 
-    // Conflict ring
     if (ac.conflict) {
       ctx.strokeStyle='#ff3333'; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.arc(px,py,10,0,Math.PI*2); ctx.stroke();
     }
 
-    // Feature 3: Emergency ring (flashing red)
     if (ac.emergency && ac.emergencyTimer > 0) {
       const flashOn = Math.floor(G.realTime * 2) % 2 === 0;
       if (flashOn) {
@@ -1176,7 +1113,6 @@ function drawRadar() {
       }
     }
 
-    // Data tag
     ctx.fillStyle = col;
     ctx.font='bold 13px Courier New';
     ctx.fillText(ac.cs, px+8, py-3);
@@ -1191,7 +1127,6 @@ function drawRadar() {
     ctx.fillText(`${flStr} ${Math.round(ac.spd)}kts ${tagExtra}`, px+8, py+9);
   });
 
-  // Crash markers — red X that fades over 4 seconds
   G.crashMarkers.forEach(m => {
     const { px, py } = nm2px(m.x, m.y);
     const alpha = Math.min(1, m.ttl / 2);
@@ -1207,26 +1142,22 @@ function drawRadar() {
   });
 }
 
-// Feature 4: Conflict prediction lines
 function drawConflictPredictions() {
   const live = G.acs.filter(a => !a.removed && a.state !== 'landing');
-  const PRED_SECS = 120; // 2 minutes of sim time
+  const PRED_SECS = 120;
   for (let i = 0; i < live.length; i++) {
     for (let j = i+1; j < live.length; j++) {
       const a = live[i], b = live[j];
       const curDist = dst(a.x, a.y, b.x, b.y);
-      if (curDist > 15) continue; // only check close pairs
+      if (curDist > 15) continue;
 
-      // Predict positions in 2 sim-minutes
-      const nmpsA = a.spd / 3600;
-      const nmpsB = b.spd / 3600;
-      const axP = a.x + sin(a.hdg) * nmpsA * PRED_SECS + WIND.dx * PRED_SECS;
-      const ayP = a.y + cos(a.hdg) * nmpsA * PRED_SECS + WIND.dy * PRED_SECS;
-      const bxP = b.x + sin(b.hdg) * nmpsB * PRED_SECS + WIND.dx * PRED_SECS;
-      const byP = b.y + cos(b.hdg) * nmpsB * PRED_SECS + WIND.dy * PRED_SECS;
+      const nmpsA = a.spd / 3600, nmpsB = b.spd / 3600;
+      const axP = a.x + sin(a.hdg)*nmpsA*PRED_SECS + WIND.dx*PRED_SECS;
+      const ayP = a.y + cos(a.hdg)*nmpsA*PRED_SECS + WIND.dy*PRED_SECS;
+      const bxP = b.x + sin(b.hdg)*nmpsB*PRED_SECS + WIND.dx*PRED_SECS;
+      const byP = b.y + cos(b.hdg)*nmpsB*PRED_SECS + WIND.dy*PRED_SECS;
       const predDist = dst(axP, ayP, bxP, byP);
 
-      // Only draw if converging
       if (predDist >= curDist) continue;
 
       const isDanger  = predDist < 5;
@@ -1234,37 +1165,23 @@ function drawConflictPredictions() {
       if (!isWarning) continue;
 
       const lineCol = isDanger ? '#ff4444' : '#ffdd33';
-
-      const pa = nm2px(a.x, a.y);
-      const pb = nm2px(b.x, b.y);
-      const paP = nm2px(axP, ayP);
-      const pbP = nm2px(bxP, byP);
+      const pa = nm2px(a.x, a.y), pb = nm2px(b.x, b.y);
+      const paP = nm2px(axP, ayP), pbP = nm2px(bxP, byP);
 
       ctx.setLineDash([4,4]);
       ctx.strokeStyle = lineCol;
       ctx.lineWidth = 1;
       ctx.globalAlpha = isDanger ? 0.8 : 0.5;
 
-      // Line from current A to predicted A
+      ctx.beginPath(); ctx.moveTo(pa.px,pa.py); ctx.lineTo(paP.px,paP.py); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pb.px,pb.py); ctx.lineTo(pbP.px,pbP.py); ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(pa.px, pa.py);
-      ctx.lineTo(paP.px, paP.py);
-      ctx.stroke();
-
-      // Line from current B to predicted B
-      ctx.beginPath();
-      ctx.moveTo(pb.px, pb.py);
-      ctx.lineTo(pbP.px, pbP.py);
-      ctx.stroke();
-
-      // Small X at predicted positions
-      ctx.beginPath();
-      ctx.moveTo(paP.px-4, paP.py-4); ctx.lineTo(paP.px+4, paP.py+4);
-      ctx.moveTo(paP.px+4, paP.py-4); ctx.lineTo(paP.px-4, paP.py+4);
+      ctx.moveTo(paP.px-4,paP.py-4); ctx.lineTo(paP.px+4,paP.py+4);
+      ctx.moveTo(paP.px+4,paP.py-4); ctx.lineTo(paP.px-4,paP.py+4);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(pbP.px-4, pbP.py-4); ctx.lineTo(pbP.px+4, pbP.py+4);
-      ctx.moveTo(pbP.px+4, pbP.py-4); ctx.lineTo(pbP.px-4, pbP.py+4);
+      ctx.moveTo(pbP.px-4,pbP.py-4); ctx.lineTo(pbP.px+4,pbP.py+4);
+      ctx.moveTo(pbP.px+4,pbP.py-4); ctx.lineTo(pbP.px-4,pbP.py+4);
       ctx.stroke();
 
       ctx.setLineDash([]);
@@ -1281,13 +1198,18 @@ function drawLine(x1,y1,x2,y2) {
 function renderStrips() {
   const el = document.getElementById('strip-list');
   const live = G.acs.filter(a=>!a.removed);
-  el.innerHTML = live.map(ac => {
+  // Clamp GP nav index
+  if (GP.navIdx >= live.length) GP.navIdx = Math.max(0, live.length - 1);
+
+  el.innerHTML = live.map((ac, i) => {
     const isSel = G.selected && G.selected.uid===ac.uid;
     const isEmg = ac.emergency && ac.emergencyTimer > 0;
+    const isGpFocus = GP.connected && GP.mode==='nav' && i===GP.navIdx;
     let cls = `strip ${ac.kind}`;
     if (isEmg)       cls += ' emergency';
     else if (ac.conflict) cls += ' warn';
     if (isSel)       cls += ' selected';
+    if (isGpFocus)   cls += ' gp-focus';
 
     const icon = ac.state==='approach'?'↘':ac.state==='final'?'▼':ac.kind==='dep'?'↑':'→';
     let state = ac.state==='approach'||ac.state==='final' ? ac.appRwy : (ac.dest||'');
@@ -1311,9 +1233,7 @@ ${icon} <b${emgStyle}>${ac.cs}</b> <span style="color:#${isEmg?'ff2222':'1a7a1a'
 function renderAcInfo() {
   const ac = G.selected;
   const ov = document.getElementById('ac-overlay');
-  if (!ac||ac.removed) {
-    ov.style.display='none'; return;
-  }
+  if (!ac||ac.removed) { ov.style.display='none'; return; }
   const h = n => n.toString().padStart(3,'0');
   ov.style.display = 'block';
   ov.innerHTML =
@@ -1348,6 +1268,7 @@ function selectAC(uid) {
   if (G.selected) G.selected.selected=false;
   G.selected = G.acs.find(a=>a.uid===uid) || null;
   renderStrips(); renderAcInfo();
+  // No cmd-input to focus in gamepad version
 }
 
 canvas.addEventListener('click', e => {
@@ -1362,10 +1283,16 @@ canvas.addEventListener('click', e => {
   });
   if (best) {
     selectAC(best.uid);
+    if (GP.connected) {
+      GP.mode = 'cmd';
+      gpInitVal();
+      renderGPHUD();
+    }
   } else {
     G.selected=null;
     document.getElementById('ac-overlay').style.display='none';
     renderStrips();
+    if (GP.connected && GP.mode==='cmd') { GP.mode='nav'; renderGPHUD(); }
   }
 });
 
@@ -1388,6 +1315,273 @@ function cycleSpeed() {
 function startGame() {
   document.getElementById('help-overlay').style.display='none';
   G.started=true;
+  if (GP.connected) { GP.mode = 'nav'; renderGPHUD(); }
+}
+
+// ============================================================
+//  GAMEPAD
+// ============================================================
+const GP_CMD   = ['HDG','ALT','SPD','APP','DCT','HOLD'];
+const AP_ICAOS = ['EDDF','EDDM','EDDP','EDDH','EDDV','KDEN'];
+
+const GP = {
+  connected: false,
+  mode: 'airport',   // 'airport' | 'help' | 'nav' | 'cmd'
+  navIdx:  0,
+  apIdx:   0,
+  cmdType: 0,        // index into GP_CMD
+  cmdVal:  0,        // numeric value or sub-index
+  prevBtn: {},
+  stickFrames: 0,
+};
+
+window.addEventListener('gamepadconnected', () => {
+  GP.connected = true;
+  document.getElementById('gp-hud').style.display = 'flex';
+  gpHighlightAirport(GP.apIdx);
+  renderGPHUD();
+  msg('🎮 Gamepad connected!', 'msg-ok');
+});
+
+window.addEventListener('gamepaddisconnected', () => {
+  GP.connected = false;
+  document.getElementById('gp-hud').style.display = 'none';
+});
+
+function gpHighlightAirport(idx) {
+  document.querySelectorAll('.ap-btn').forEach((b, i) => {
+    b.classList.toggle('gp-focus', i === idx);
+  });
+}
+
+function gpEdge(gp, idx) {
+  const cur  = gp.buttons[idx]?.pressed || false;
+  const prev = GP.prevBtn[idx] || false;
+  return cur && !prev;
+}
+
+function gpFrame() {
+  const gpads = navigator.getGamepads ? navigator.getGamepads() : [];
+  let gp = null;
+  for (const g of gpads) { if (g) { gp = g; break; } }
+  if (!gp) return;
+
+  // Auto-show HUD if gamepad found but not flagged connected yet
+  if (!GP.connected) {
+    GP.connected = true;
+    document.getElementById('gp-hud').style.display = 'flex';
+    gpHighlightAirport(GP.apIdx);
+  }
+
+  const edge = idx => gpEdge(gp, idx);
+
+  // ---- AIRPORT SELECTION ----
+  if (GP.mode === 'airport') {
+    if (edge(12)) { GP.apIdx = (GP.apIdx + AP_ICAOS.length - 1) % AP_ICAOS.length; gpHighlightAirport(GP.apIdx); }
+    if (edge(13)) { GP.apIdx = (GP.apIdx + 1) % AP_ICAOS.length; gpHighlightAirport(GP.apIdx); }
+    if (edge(14)) { GP.apIdx = (GP.apIdx + AP_ICAOS.length - 2) % AP_ICAOS.length; gpHighlightAirport(GP.apIdx); }
+    if (edge(15)) { GP.apIdx = (GP.apIdx + 2) % AP_ICAOS.length; gpHighlightAirport(GP.apIdx); }
+    if (edge(0))  { selectAirport(AP_ICAOS[GP.apIdx]); }
+    gpSavePrev(gp); renderGPHUD(); return;
+  }
+
+  // ---- HELP SCREEN ----
+  if (GP.mode === 'help') {
+    if (edge(0) || edge(9)) { startGame(); }
+    gpSavePrev(gp); renderGPHUD(); return;
+  }
+
+  // ---- START button — pause (any game mode) ----
+  if (edge(9)) {
+    G.paused = !G.paused;
+    msg(G.paused ? '⏸ PAUSED' : '▶ RESUMED');
+  }
+
+  // ---- Right stick Y — zoom ----
+  const rzY = gp.axes[3] || 0;
+  if (Math.abs(rzY) > 0.3) {
+    CFG.range = Math.max(20, Math.min(150, CFG.range * (1 + rzY * 0.025)));
+    updateScale();
+  }
+
+  // ---- NAV MODE ----
+  if (GP.mode === 'nav') {
+    const live = G.acs.filter(a => !a.removed);
+    GP.navIdx = Math.min(GP.navIdx, Math.max(0, live.length - 1));
+
+    if (edge(12) && live.length > 0) { GP.navIdx = (GP.navIdx + live.length - 1) % live.length; }
+    if (edge(13) && live.length > 0) { GP.navIdx = (GP.navIdx + 1) % live.length; }
+
+    if (edge(0) && live.length > 0) {
+      selectAC(live[GP.navIdx].uid);
+      GP.mode = 'cmd';
+      gpInitVal();
+    }
+    if (edge(1)) {
+      G.selected = null;
+      document.getElementById('ac-overlay').style.display = 'none';
+    }
+  }
+
+  // ---- CMD MODE ----
+  else if (GP.mode === 'cmd') {
+    const ac = G.selected;
+    if (!ac || ac.removed) { GP.mode = 'nav'; }
+    else {
+      if (edge(1))  { GP.mode = 'nav'; G.selected = null; document.getElementById('ac-overlay').style.display='none'; }
+      if (edge(4))  { GP.cmdType = (GP.cmdType + GP_CMD.length - 1) % GP_CMD.length; gpInitVal(); }
+      if (edge(5))  { GP.cmdType = (GP.cmdType + 1) % GP_CMD.length; gpInitVal(); }
+      if (edge(3))  { GP.cmdType = GP_CMD.indexOf('APP'); gpInitVal(); }
+      if (edge(2))  { parseCmd('hold'); renderAcInfo(); }
+      if (edge(0))  { gpSend(ac); renderAcInfo(); }
+      if (edge(12)) { gpAdjust(-1, false); }
+      if (edge(13)) { gpAdjust(+1, false); }
+      if (edge(14)) { gpAdjust(-1, true);  }
+      if (edge(15)) { gpAdjust(+1, true);  }
+
+      // Left stick Y — throttled continuous adjust
+      const lzY = gp.axes[1] || 0;
+      if (Math.abs(lzY) > 0.25) {
+        GP.stickFrames++;
+        if (GP.stickFrames % 6 === 0) gpAdjust(Math.sign(lzY), false);
+      } else {
+        GP.stickFrames = 0;
+      }
+    }
+  }
+
+  gpSavePrev(gp);
+  renderGPHUD();
+}
+
+function gpSavePrev(gp) {
+  for (let i = 0; i < gp.buttons.length; i++) {
+    GP.prevBtn[i] = gp.buttons[i]?.pressed || false;
+  }
+}
+
+function gpInitVal() {
+  const ac = G.selected;
+  if (!ac) return;
+  const cmd = GP_CMD[GP.cmdType];
+  switch (cmd) {
+    case 'HDG':  GP.cmdVal = Math.round(ac.tHdg); break;
+    case 'ALT':  GP.cmdVal = Math.round(ac.tAlt / 100); break;
+    case 'SPD':  GP.cmdVal = Math.round(ac.tSpd); break;
+    case 'APP':  GP.cmdVal = 0; break;
+    case 'DCT':  GP.cmdVal = 0; break;
+    case 'HOLD': GP.cmdVal = 0; break;
+  }
+}
+
+function gpAdjust(dir, big) {
+  const cmd = GP_CMD[GP.cmdType];
+  switch (cmd) {
+    case 'HDG': GP.cmdVal = normHdg(GP.cmdVal + dir * (big ? 30 : 5)); break;
+    case 'ALT': GP.cmdVal = Math.max(0, Math.min(450, GP.cmdVal + dir * (big ? 50 : 10))); break;
+    case 'SPD': GP.cmdVal = Math.max(0, Math.min(600, GP.cmdVal + dir * (big ? 50 : 10))); break;
+    case 'APP': { const n=RUNWAYS.length; GP.cmdVal=((GP.cmdVal+dir)%n+n)%n; break; }
+    case 'DCT': { const n=WAYPOINTS.length; GP.cmdVal=((GP.cmdVal+dir)%n+n)%n; break; }
+  }
+}
+
+function gpSend(ac) {
+  const cmd = GP_CMD[GP.cmdType];
+  switch (cmd) {
+    case 'HDG':  parseCmd(`hdg ${GP.cmdVal}`); break;
+    case 'ALT':  parseCmd(`alt ${GP.cmdVal}`); break;
+    case 'SPD':  parseCmd(`spd ${GP.cmdVal}`); break;
+    case 'APP':  { const r=RUNWAYS[GP.cmdVal]; if(r) parseCmd(`app ${r.id}`); break; }
+    case 'DCT':  { const w=WAYPOINTS[GP.cmdVal]; if(w) parseCmd(`dct ${w.id}`); break; }
+    case 'HOLD': parseCmd('hold'); break;
+  }
+}
+
+function gpValStr() {
+  const cmd = GP_CMD[GP.cmdType];
+  switch (cmd) {
+    case 'HDG':  return `${GP.cmdVal.toString().padStart(3,'0')}°`;
+    case 'ALT':  return `FL${GP.cmdVal.toString().padStart(3,'0')}`;
+    case 'SPD':  return `${GP.cmdVal} kts`;
+    case 'APP':  return RUNWAYS[GP.cmdVal]  ? `ILS ${RUNWAYS[GP.cmdVal].id}`  : '---';
+    case 'DCT':  return WAYPOINTS[GP.cmdVal]? `→ ${WAYPOINTS[GP.cmdVal].id}` : '---';
+    case 'HOLD': return 'HOLD PATTERN';
+  }
+  return '';
+}
+
+function renderGPHUD() {
+  const hud = document.getElementById('gp-hud');
+  if (!GP.connected) return;
+
+  if (GP.mode === 'airport') {
+    hud.innerHTML = `<div class="gp-row">
+      <span class="gp-mode">AIRPORT</span>
+      <span class="gp-btn">D↑↓</span> Browse &nbsp;
+      <span class="gp-btn">A</span> Select airport
+    </div>`;
+    return;
+  }
+
+  if (GP.mode === 'help') {
+    hud.innerHTML = `<div class="gp-row">
+      <span class="gp-mode">HELP</span>
+      <span class="gp-btn">A</span> Start game &nbsp;
+      <span class="gp-btn">START</span> Start game
+    </div>`;
+    return;
+  }
+
+  if (GP.mode === 'nav') {
+    const live = G.acs.filter(a=>!a.removed);
+    const ac = live[GP.navIdx];
+    hud.innerHTML = `<div class="gp-row">
+      <span class="gp-mode">NAV</span>
+      ${ac ? `<span style="color:#aaffaa;font-weight:bold">${ac.cs}</span> FL${ac.fl.toString().padStart(3,'0')} ${Math.round(ac.hdg).toString().padStart(3,'0')}°` : '<span style="color:#1a5a1a">no aircraft</span>'}
+      &nbsp;&nbsp;
+      <span class="gp-btn">D↑↓</span> Browse &nbsp;
+      <span class="gp-btn">A</span> Select &nbsp;
+      <span class="gp-btn">B</span> Deselect &nbsp;
+      <span class="gp-btn">START</span> Pause &nbsp;
+      <span class="gp-btn">R↕</span> Zoom
+    </div>`;
+    return;
+  }
+
+  if (GP.mode === 'cmd') {
+    const ac = G.selected;
+    if (!ac) return;
+    const cmdName = GP_CMD[GP.cmdType];
+    const valStr  = gpValStr();
+    const cmdBtns = GP_CMD.map((c,i) =>
+      i===GP.cmdType
+        ? `<span style="background:#0f4a0f;border:1px solid #44ff44;padding:1px 5px;border-radius:3px;color:#44ff44;font-size:11px">${c}</span>`
+        : `<span style="color:#1a6a1a;font-size:11px">${c}</span>`
+    ).join(' ');
+    hud.innerHTML = `
+      <div class="gp-row" style="gap:8px">
+        <span class="gp-mode">CMD</span>
+        <span style="color:#aaffaa;font-weight:bold">${ac.cs}</span>
+        <span style="color:#22cc22;font-size:11px">FL${ac.fl.toString().padStart(3,'0')} ${Math.round(ac.spd)}kts ${ac.state.toUpperCase()}</span>
+        ${ac.emergency?'<span style="color:#ff0000">⚡MAYDAY</span>':''}
+      </div>
+      <div class="gp-row gp-cmd-bar">
+        <span class="gp-btn">LB</span>${cmdBtns}<span class="gp-btn">RB</span>
+        &nbsp;&nbsp;
+        <span class="gp-label">${cmdName}</span>
+        <span class="gp-val">${valStr}</span>
+      </div>
+      <div class="gp-row">
+        <span class="gp-btn">D↑↓</span>±step &nbsp;
+        <span class="gp-btn">D←→</span>±big &nbsp;
+        <span class="gp-btn">A</span>Send &nbsp;
+        <span class="gp-btn">B</span>Back &nbsp;
+        <span class="gp-btn">X</span>HOLD &nbsp;
+        <span class="gp-btn">Y</span>ILS &nbsp;
+        <span class="gp-btn">START</span>Pause &nbsp;
+        <span class="gp-btn">R↕</span>Zoom
+      </div>`;
+  }
 }
 
 // ============================================================
@@ -1400,50 +1594,46 @@ function loop(ts) {
   const dt = Math.min((ts-lastT)/1000, 0.1);
   lastT=ts;
 
+  gpFrame();
+
   if (!G.paused && G.started) {
     G.realTime += dt;
 
-    // Spawn
     if (G.realTime >= G.nextSpawn) {
       spawn();
       G.nextSpawn = G.realTime + CFG.spawnMinR + Math.random()*(CFG.spawnMaxR-CFG.spawnMinR);
     }
 
-    // Feature 3: Emergency trigger
     if (G.realTime >= G.nextEmergency) {
       triggerEmergency();
       G.nextEmergency = G.realTime + 180 + Math.random() * 120;
     }
 
-    // Update each AC
     G.acs.forEach(ac => {
       if (ac.removed) return;
       ac.update(dt);
 
-      // Crashed
       if (ac.crashed) {
-        G.crashMarkers.push({ x: ac.x, y: ac.y, ttl: 4.0 }); // 4 real-sec marker
+        G.crashMarkers.push({ x: ac.x, y: ac.y, ttl: 4.0 });
         freeCS(ac.cs); ac.removed=true;
-        if (G.selected?.uid===ac.uid) G.selected=null;
+        if (G.selected?.uid===ac.uid) { G.selected=null; if(GP.connected) GP.mode='nav'; }
         const c = document.getElementById('radar');
         c.style.boxShadow = '0 0 0 6px #ff0000, 0 0 40px #ff0000';
         setTimeout(() => c.style.boxShadow = '', 800);
         return;
       }
 
-      // Landed
       if (ac.state==='landing') {
         const pts = ac.emergency ? 250 : 100;
         G.score += pts; G.landed++;
         LEVEL.completions++;
         msg(`✔ ${ac.cs} LANDED RWY${ac.appRwy} +${pts}pts${ac.emergency?' ⚡MAYDAY BONUS':''}`, 'msg-ok');
         freeCS(ac.cs); ac.removed=true;
-        if (G.selected?.uid===ac.uid) G.selected=null;
+        if (G.selected?.uid===ac.uid) { G.selected=null; if(GP.connected) GP.mode='nav'; }
         renderScore();
         checkLevelUp();
       }
 
-      // Departure reached waypoint (dest or directTo target)
       if (!ac.removed && ac.kind==='dep') {
         const targetId = ac.directTo || ac.dest;
         if (targetId) {
@@ -1453,20 +1643,19 @@ function loop(ts) {
             LEVEL.completions++;
             msg(`✔ ${ac.cs} DEPARTED → ${targetId} +50pts`, 'msg-ok');
             freeCS(ac.cs); ac.removed=true;
-            if (G.selected?.uid===ac.uid) G.selected=null;
+            if (G.selected?.uid===ac.uid) { G.selected=null; if(GP.connected) GP.mode='nav'; }
             renderScore();
             checkLevelUp();
           }
         }
       }
 
-      // Arrival left airspace (rectangular boundary — independent of zoom)
       if (!ac.removed && ac.kind==='arr') {
         if (Math.abs(ac.x) > CFG.boundary+6 || Math.abs(ac.y) > CFG.boundary+6) {
           G.score-=100;
           msg(`✘ ${ac.cs} LEFT AIRSPACE -100pts`, 'msg-err');
           freeCS(ac.cs); ac.removed=true;
-          if (G.selected?.uid===ac.uid) G.selected=null;
+          if (G.selected?.uid===ac.uid) { G.selected=null; if(GP.connected) GP.mode='nav'; }
           renderScore();
         }
       }
@@ -1487,7 +1676,6 @@ function loop(ts) {
 //  INIT
 // ============================================================
 initWind();
-// Wait one frame so flex layout resolves before reading canvas dimensions
 requestAnimationFrame(() => {
   initCanvas();
   updateScale();
@@ -1504,168 +1692,6 @@ canvas.addEventListener('wheel', e => {
   CFG.range = Math.max(20, Math.min(150, CFG.range * factor));
   updateScale();
 }, { passive: false });
-
-// ============================================================
-//  GAMEPAD
-// ============================================================
-const GP = {
-  mode: 'nav',
-  stripIdx: 0,
-  cmdType: 0,
-  cmdVal: 0,
-  rwyIdx: 0,
-  wptIdx: 0,
-  prev: [],
-  stickTick: 0,
-  connected: false,
-};
-const GP_CMD = ['HDG','ALT','SPD','APP','HOLD','DCT'];
-
-function gpJust(buttons, idx) {
-  return !!(buttons[idx]?.pressed && !GP.prev[idx]);
-}
-
-function gpInitVal() {
-  const ac = G.selected;
-  const ct = GP_CMD[GP.cmdType];
-  if (ct==='HDG') GP.cmdVal = ac ? Math.round(ac.hdg/5)*5 : 360;
-  else if (ct==='ALT') GP.cmdVal = ac ? Math.round(ac.tAlt/500)*500 : 3000;
-  else if (ct==='SPD') GP.cmdVal = ac ? Math.round(ac.tSpd/10)*10 : 250;
-  else if (ct==='APP') GP.rwyIdx = 0;
-  else if (ct==='DCT') GP.wptIdx = 0;
-}
-
-function gpAdjust(dir, big) {
-  const ct = GP_CMD[GP.cmdType];
-  if (ct==='HDG') GP.cmdVal = normHdg(GP.cmdVal + dir*(big?30:5));
-  else if (ct==='ALT') GP.cmdVal = Math.max(0,Math.min(15000, GP.cmdVal+dir*(big?2000:500)));
-  else if (ct==='SPD') GP.cmdVal = Math.max(100,Math.min(400, GP.cmdVal+dir*(big?50:10)));
-  else if (ct==='APP') GP.rwyIdx = ((GP.rwyIdx+dir)+RUNWAYS.length)%RUNWAYS.length;
-  else if (ct==='DCT') GP.wptIdx = ((GP.wptIdx+dir)+WAYPOINTS.length)%WAYPOINTS.length;
-}
-
-function gpSend() {
-  const ct = GP_CMD[GP.cmdType];
-  if (ct==='HDG')  parseCmd(`h ${Math.round(GP.cmdVal)}`);
-  else if (ct==='ALT')  parseCmd(`a ${Math.round(GP.cmdVal)}`);
-  else if (ct==='SPD')  parseCmd(`s ${Math.round(GP.cmdVal)}`);
-  else if (ct==='APP')  { if (RUNWAYS[GP.rwyIdx]) parseCmd(`app ${RUNWAYS[GP.rwyIdx].id}`); }
-  else if (ct==='HOLD') parseCmd('hold');
-  else if (ct==='DCT')  { if (WAYPOINTS[GP.wptIdx]) parseCmd(`d ${WAYPOINTS[GP.wptIdx].id}`); }
-  GP.mode = 'nav';
-}
-
-function gpValStr() {
-  const ct = GP_CMD[GP.cmdType];
-  if (ct==='HDG')  return Math.round(GP.cmdVal).toString().padStart(3,'0')+'°';
-  if (ct==='ALT')  return 'FL'+Math.round(GP.cmdVal/100).toString().padStart(3,'0');
-  if (ct==='SPD')  return Math.round(GP.cmdVal)+'kt';
-  if (ct==='APP')  return RUNWAYS[GP.rwyIdx]?.id ?? '---';
-  if (ct==='HOLD') return '(execute)';
-  if (ct==='DCT')  return WAYPOINTS[GP.wptIdx]?.id ?? '---';
-  return '';
-}
-
-function gpFrame() {
-  const gps = navigator.getGamepads();
-  let gp = null;
-  for (const g of gps) { if (g) { gp=g; break; } }
-  if (!gp) { requestAnimationFrame(gpFrame); return; }
-
-  const btn = gp.buttons;
-  const live = G.acs.filter(a=>!a.removed);
-
-  if (GP.mode==='nav') {
-    if (gpJust(btn,12)) GP.stripIdx = Math.max(0, GP.stripIdx-1);
-    if (gpJust(btn,13)) GP.stripIdx = Math.min(Math.max(0,live.length-1), GP.stripIdx+1);
-    if (gpJust(btn,1))  { G.selected=null; document.getElementById('ac-overlay').style.display='none'; renderStrips(); renderAcInfo(); }
-    if (gpJust(btn,0))  {
-      const ac = live[GP.stripIdx];
-      if (ac) { selectAC(ac.uid); GP.mode='cmd'; GP.cmdType=0; gpInitVal(); }
-    }
-    if (gpJust(btn,9))  { G.paused=!G.paused; msg(G.paused?'⏸ PAUSED':'▶ RESUMED'); }
-  } else {
-    if (gpJust(btn,1))  { GP.mode='nav'; }
-    if (gpJust(btn,4))  { GP.cmdType=(GP.cmdType-1+GP_CMD.length)%GP_CMD.length; gpInitVal(); }
-    if (gpJust(btn,5))  { GP.cmdType=(GP.cmdType+1)%GP_CMD.length; gpInitVal(); }
-    if (gpJust(btn,2))  { parseCmd('hold'); GP.mode='nav'; }
-    if (gpJust(btn,3))  { GP.cmdType=GP_CMD.indexOf('APP'); gpInitVal(); }
-    if (gpJust(btn,12)) gpAdjust(-1,false);
-    if (gpJust(btn,13)) gpAdjust(+1,false);
-    if (gpJust(btn,14)) gpAdjust(-1,true);
-    if (gpJust(btn,15)) gpAdjust(+1,true);
-    if (gpJust(btn,0))  gpSend();
-
-    // Left stick Y continuous
-    const ly = gp.axes[1] ?? 0;
-    if (Math.abs(ly) > 0.25) {
-      GP.stickTick++;
-      if (GP.stickTick % 6 === 0) gpAdjust(Math.sign(ly), false);
-    } else { GP.stickTick = 0; }
-  }
-
-  // Right stick Y: zoom
-  const ry = gp.axes[3] ?? 0;
-  if (Math.abs(ry) > 0.3) {
-    CFG.range = Math.max(20, Math.min(150, CFG.range + ry*2));
-    updateScale();
-  }
-
-  GP.prev = btn.map(b=>b.pressed);
-  renderGPHUD(live);
-  requestAnimationFrame(gpFrame);
-}
-
-function renderGPHUD(live) {
-  const ac = G.selected;
-  const ct = GP_CMD[GP.cmdType];
-
-  // Top: aircraft info
-  let info = '— no selection —';
-  if (ac && !ac.removed) {
-    const fl = ac.fl.toString().padStart(3,'0');
-    const tfl = Math.round(ac.tAlt/100).toString().padStart(3,'0');
-    const st = ac.state==='approach'?'APP':ac.state==='final'?`ILS ${ac.appRwy}`:ac.holding?'HOLD':'';
-    info = `✈ ${ac.cs} (${ac.acType})  FL${fl}→FL${tfl}  ${Math.round(ac.spd)}kt  HDG ${Math.round(ac.hdg).toString().padStart(3,'0')}°${st?' · '+st:''}${ac.emergency?' ⚡MAYDAY':''}`;
-  }
-  document.getElementById('gp-info').textContent = info;
-
-  // Center: big value display
-  let big = '';
-  if (GP.mode==='nav') {
-    const hi = live[GP.stripIdx];
-    big = hi ? `◉ ${hi.cs}` : 'NAVIGATE';
-  } else {
-    big = `${ct}  ${gpValStr()}`;
-  }
-  document.getElementById('gp-big').textContent = big;
-
-  // Bottom: hints
-  let hints = '';
-  if (GP.mode==='nav') {
-    hints = '↕ D-PAD Navigate   ·   A Select   ·   B Deselect   ·   START Pause';
-  } else {
-    const types = GP_CMD.map((t,i)=>i===GP.cmdType?`[${t}]`:t).join('  ');
-    hints = `B Back   ·   LB ◄ ${types} ► RB   ·   ↕ Adjust   ·   A Confirm   ·   X Hold   ·   Y ILS`;
-  }
-  document.getElementById('gp-hints').textContent = hints;
-
-  // Update gp-focus on strips
-  document.querySelectorAll('.strip').forEach((el,i) => {
-    el.classList.toggle('gp-focus', GP.mode==='nav' && i===GP.stripIdx);
-  });
-}
-
-window.addEventListener('gamepadconnected', e => {
-  GP.connected = true;
-  document.getElementById('gp-hud').style.display = 'flex';
-  msg(`🎮 Controller connected: ${e.gamepad.id}`, 'msg-ok');
-  requestAnimationFrame(gpFrame);
-});
-window.addEventListener('gamepaddisconnected', () => {
-  GP.connected = false;
-  document.getElementById('gp-hud').style.display = 'none';
-});
 </script>
 </body>
 </html>
