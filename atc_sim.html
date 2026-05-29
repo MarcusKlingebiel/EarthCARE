@@ -738,7 +738,7 @@ const G = {
   paused:    false,
   started:   false,
   // Feature 3: Emergency timer
-  nextEmergency:  180 + Math.random() * 60,   // real seconds
+  nextEmergency:  360 + Math.random() * 120,   // real seconds
   crashMarkers: [],  // [{x,y,ttl}] — brief red X after crash
   warnedPairs:  new Set(),  // uid/uid keys of pairs already penalised this conflict
 };
@@ -1424,7 +1424,7 @@ function loop(ts) {
     // Feature 3: Emergency trigger
     if (G.realTime >= G.nextEmergency) {
       triggerEmergency();
-      G.nextEmergency = G.realTime + 90 + Math.random() * 60;
+      G.nextEmergency = G.realTime + 180 + Math.random() * 120;
     }
 
     // Update each AC
