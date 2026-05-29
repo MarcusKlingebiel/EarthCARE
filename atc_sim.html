@@ -465,6 +465,7 @@ function checkLevelUp() {
     CFG.maxAC     = Math.min(12, 6 + LEVEL.n);
     document.getElementById('level-display').textContent = `LEVEL ${LEVEL.n}`;
     msg(`▲ LEVEL UP! Now Level ${LEVEL.n} — max ${CFG.maxAC} aircraft`, 'msg-ok');
+    updateWind();
     // Flash canvas border
     const c = document.getElementById('radar');
     c.classList.remove('level-up');
@@ -738,7 +739,6 @@ const G = {
   started:   false,
   // Feature 3: Emergency timer
   nextEmergency:  180 + Math.random() * 60,   // real seconds
-  nextWindChange: 120 + Math.random() * 120,  // real seconds
   crashMarkers: [],  // [{x,y,ttl}] — brief red X after crash
   warnedPairs:  new Set(),  // uid/uid keys of pairs already penalised this conflict
 };
@@ -1419,12 +1419,6 @@ function loop(ts) {
     if (G.realTime >= G.nextEmergency) {
       triggerEmergency();
       G.nextEmergency = G.realTime + 90 + Math.random() * 60;
-    }
-
-    // Wind shift
-    if (G.realTime >= G.nextWindChange) {
-      updateWind();
-      G.nextWindChange = G.realTime + 120 + Math.random() * 120;
     }
 
     // Update each AC
