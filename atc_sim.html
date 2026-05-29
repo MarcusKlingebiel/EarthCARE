@@ -763,12 +763,18 @@ function spawn() {
   if (isArr) {
     const alt = 8000 + Math.floor(Math.random()*7)*1000;
     const spd = 280 + Math.floor(Math.random()*80);
+    // Scale waypoint direction out to boundary edge
+    const wpDist = Math.hypot(wp.x, wp.y) || 1;
+    const scale  = CFG.boundary / wpDist;
+    const sx = wp.x * scale + (Math.random()-.5)*8;
+    const sy = wp.y * scale + (Math.random()-.5)*8;
     const ac = new AC({
       cs:   nextCS(),
       kind: 'arr',
-      x:    wp.x + (Math.random()-.5)*3,
-      y:    wp.y + (Math.random()-.5)*3,
-      hdg:  wp.hdg, alt, spd,
+      x:    sx,
+      y:    sy,
+      hdg:  bearing(sx, sy, 0, 0),
+      alt, spd,
     });
     G.acs.push(ac);
     msg(`${ac.cs} (${ac.acType}) ARRIVAL FL${Math.round(alt/100).toString().padStart(3,'0')} ${spd}kts`, 'msg-ok');
